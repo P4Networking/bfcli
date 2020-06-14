@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package proto;
+option go_package = ".;proto";
+
+service BfRuntime {
+    rpc Write (WriteRequest) returns (WriteResponse) {
+    }
+
+    rpc Read (ReadRequest) returns (stream ReadResponse) {
+    }
+
+    rpc GetForwardingPipelineConfig (GetForwardingPipelineConfigRequest) returns (GetForwardingPipelineConfigResponse) {
+    }
+}
+
+message WriteRequest {
+    repeated Update updates = 1;
+}
+
+message WriteResponse {
+}
+
+message ReadRequest {
+    repeated Entity entities = 1;
+}
+
+message ReadResponse {
+    repeated Entity entities = 1;
+}
+
+message Update {
+    enum Type {
+        INSERT = 0;
+        DELETE = 1;
+    }
+    Type type = 1;
+    Entity entity = 2;
+}
+
+message Entity {
+    oneof entity {
+        TableEntry table_entry = 1;
+    }
+}
+
+message TableEntry {
+    uint32 table_id = 1;
+    TableKey key = 2;
+    TableData data = 3;
+}
+
+message TableData {
+    uint32 action_id = 1;
+    repeated DataField fields = 2;
+}
+
+message DataField {
+    uint32 field_id = 1;
+    oneof value {
+        bytes stream = 2;
+        float float_val = 3;
+        string str_val = 4;
+        IntArray int_arr_val = 5;
+        BoolArray bool_arr_val = 6;
+        ContainerArray container_arr_val = 7;
+        bool bool_val = 8;
+    }
+    message IntArray {
+        repeated uint32 val = 1;
+    }
+    message BoolArray {
+        repeated bool val = 1;
+    }
+    message ContainerArray {
+        message Container {
+            repeated DataField val = 1;
+        }
+        repeated Container container = 1;
+    }
+}
+
+message TableKey {
+    repeated KeyField fields = 1;
+}
+
+message KeyField {
+    uint32 field_id = 1;
+    message Exact {
+        bytes value = 1;
+    }
+    message Ternary {
+        bytes value = 1;
+        bytes mask = 2;
+    }
+    message LPM {
+        bytes value = 1;
+        int32 prefix_len = 2;
+    }
+    message Range {
+        bytes low = 1;
+        bytes high = 2;
+    }
+    oneof match_type {
+        Exact exact = 2;
+        Ternary ternary = 3;
+        LPM lpm = 4;
+        Range range = 5;
+    }
+}
+
+message ForwardingPipelineConfig {
+    string p4_name = 1;
+    bytes bfruntime_info = 2;
+    message Profile {
+        string profile_name = 1;
+        repeated uint32 pipe_scope = 2;
+    }
+    repeated Profile profiles = 3;
+}
+
+message NonP4Config {
+    bytes bfruntime_info = 1;
+}
+
+message GetForwardingPipelineConfigRequest {
+    uint32 device_id = 1;
+}
+
+message GetForwardingPipelineConfigResponse {
+    repeated ForwardingPipelineConfig config = 1;
+    NonP4Config non_p4_config = 2;
+}
