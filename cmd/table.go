@@ -17,23 +17,28 @@ package cmd
 
 import (
 	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
 // tableCmd represents the table command
 var tableCmd = &cobra.Command{
 	Use:   "table",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Args:  cobra.ExactArgs(0),
+	Short: "List all tables",
+	Long:  `List all tables in BFRTInfo which include P4 and Non-P4 tables`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("table called")
+		_, _, cancel, p4, nonP4 := initConfigClient()
+		defer cancel()
 
+		fmt.Println("------ The following is for P4 table ------")
+		for _, v := range p4.Tables {
+			fmt.Println(v.Name)
+		}
+
+		fmt.Println("------ The following is for non-P4 table ------")
+		for _, v := range nonP4.Tables {
+			fmt.Println(v.Name)
+		}
 	},
 }
 

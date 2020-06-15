@@ -17,7 +17,6 @@ package cmd
 
 import (
 	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +32,37 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("dump called")
+
+		//conn, err := grpc.Dial(":50000", grpc.WithInsecure(), grpc.WithBlock())
+		//if err != nil {
+		//	log.Fatalf("did not connect: %v", err)
+		//}
+		//defer conn.Close()
+		//cli := pb.NewConfigClient(conn)
+		//
+		//// Contact the server and print out its response.
+		//
+		//ctx, cancel := context.WithCancel(context.Background())
+		//defer cancel()
+		//
+		//rsp, err := cli.GetForwardingPipelineConfig(ctx, &pb.GetForwardingPipelineConfigRequest{DeviceId: uint32(77)})
+		//if err != nil {
+		//	fmt.Printf("Error with", err)
+		//}
+		//fmt.Printf("Got P4 name: %s \n", rsp.Config[0].P4Name)
+		//
+		//var p4, nonP4 util.BfRtInfoStruct
+		//err = gob.NewDecoder(bytes.NewReader(rsp.Config[0].BfruntimeInfo)).Decode(&p4)
+		//if err != nil {
+		//	log.Fatal("decode error 1:", err)
+		//}
+		//
+		//err = gob.NewDecoder(bytes.NewReader(rsp.NonP4Config.BfruntimeInfo)).Decode(&nonP4)
+		//if err != nil {
+		//	log.Fatal("decode error 1:", err)
+		//}
+		//fmt.Println("Got P4 first table name: ", p4.Tables[0].Name)
+		//fmt.Println("Got non-P4 first table name: ", nonP4.Tables[0].Name)
 	},
 }
 
