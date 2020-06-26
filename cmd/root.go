@@ -61,9 +61,6 @@ func init() {
 	//rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.bfcli.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "", "The server address")
 	//rootCmd.MarkPersistentFlagRequired("server")
-	if server == "" {
-		server = ":50000"
-	}
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

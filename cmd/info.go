@@ -27,6 +27,15 @@ var infoCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Short: "Show information about table",
 	Long:  `Display the detail of table.`,
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		_, _, conn, cancel, p4, _ := initConfigClient()
+		defer conn.Close()
+		defer cancel()
+
+		argsList, _ := p4.GuessTableName(toComplete)
+
+		return argsList, cobra.ShellCompDirectiveNoFileComp
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		//fmt.Printf("Got cmd: %s | and args: %s\n", cmd.Name(), args)
 		var tableName string
@@ -36,14 +45,15 @@ var infoCmd = &cobra.Command{
 		defer cancel()
 
 		// Guest table name via table name provide form user
-		tableName, ok := p4.GuessTableName(args[0])
+		tableList, ok := p4.GuessTableName(args[0])
 		if !ok {
-			tableName, ok = nonP4.GuessTableName(args[0])
+			tableList, ok = nonP4.GuessTableName(args[0])
 			if !ok {
 				fmt.Printf("Not found the table %s\n", args[0])
 				return
 			}
 		}
+		tableName = tableList[0]
 
 		tableId := p4.SearchTableId(tableName)
 		if tableId == util.ID_NOT_FOUND {

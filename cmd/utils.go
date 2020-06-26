@@ -11,13 +11,18 @@ import (
 	"log"
 )
 
-var p4, nonP4 util.BfRtInfoStruct
 var (
-	FOUND     = true
-	NOT_FOUND = false
+	FOUND        = true
+	NOT_FOUND    = false
+	DEFAULT_ADDR = ":50000"
+	p4           util.BfRtInfoStruct
+	nonP4        util.BfRtInfoStruct
 )
 
 func initConfigClient() (*bfrt.BfRuntimeClient, *context.Context, *grpc.ClientConn, context.CancelFunc, *util.BfRtInfoStruct, *util.BfRtInfoStruct) {
+	if server == "" {
+		server = DEFAULT_ADDR
+	}
 	conn, err := grpc.Dial(server, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -31,7 +36,7 @@ func initConfigClient() (*bfrt.BfRuntimeClient, *context.Context, *grpc.ClientCo
 
 	rsp, err := cli.GetForwardingPipelineConfig(ctx, &bfrt.GetForwardingPipelineConfigRequest{DeviceId: uint32(77)})
 	if err != nil {
-		fmt.Printf("Error with", err)
+		log.Fatalf("Error with", err)
 	}
 
 	err = gob.NewDecoder(bytes.NewReader(rsp.Config[0].BfruntimeInfo)).Decode(&p4)
@@ -69,5 +74,3 @@ func printNameById(id uint32) bool {
 	}
 	return NOT_FOUND
 }
-
-
