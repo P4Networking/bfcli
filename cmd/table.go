@@ -1,5 +1,5 @@
 /*
-Copyright © 2020 NAME HERE <EMAIL ADDRESS>
+Copyright © 2020 Chun Ming Ou <breezestars@gmail.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	all bool
+)
+
 // tableCmd represents the table command
 var tableCmd = &cobra.Command{
 	Use:   "table",
@@ -27,23 +31,27 @@ var tableCmd = &cobra.Command{
 	Short: "List all tables",
 	Long:  `List all tables in BFRTInfo which include P4 and Non-P4 tables`,
 	Run: func(cmd *cobra.Command, args []string) {
-		_, _, cancel, p4, nonP4 := initConfigClient()
+		_, _, conn, cancel, p4, nonP4 := initConfigClient()
+		defer conn.Close()
 		defer cancel()
 
-		fmt.Println("------ The following is for P4 table ------")
+		//fmt.Println("------ The following is for P4 table ------")
 		for _, v := range p4.Tables {
 			fmt.Println(v.Name)
 		}
 
-		fmt.Println("------ The following is for non-P4 table ------")
-		for _, v := range nonP4.Tables {
-			fmt.Println(v.Name)
+		if all {
+			fmt.Println("------ The following is for non-P4 table ------")
+			for _, v := range nonP4.Tables {
+				fmt.Println(v.Name)
+			}
 		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(tableCmd)
+	tableCmd.Flags().BoolVarP(&all, "all", "a", false, "Show all tables")
 
 	// Here you will define your flags and configuration settings.
 
