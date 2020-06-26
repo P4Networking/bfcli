@@ -1,5 +1,5 @@
 /*
-Copyright © 2020 NAME HERE <EMAIL ADDRESS>
+Copyright © 2020 Chun Ming Ou <breezestars@gmail.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,13 +26,24 @@ var infoCmd = &cobra.Command{
 	Use:   "info TABLE-NAME",
 	Args:  cobra.ExactArgs(1),
 	Short: "Show information about table",
-	Long: `Display the detail of table.`,
+	Long:  `Display the detail of table.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		//fmt.Printf("Got cmd: %s | and args: %s\n", cmd.Name(), args)
-		tableName := args[0]
+		var tableName string
 
-		_, _, cancel, p4, _ := initConfigClient()
+		_, _, conn, cancel, p4, _ := initConfigClient()
+		defer conn.Close()
 		defer cancel()
+
+		// Guest table name via table name provide form user
+		tableName, ok := p4.GuessTableName(args[0])
+		if !ok {
+			tableName, ok = nonP4.GuessTableName(args[0])
+			if !ok {
+				fmt.Printf("Not found the table %s\n", args[0])
+				return
+			}
+		}
 
 		tableId := p4.SearchTableId(tableName)
 		if tableId == util.ID_NOT_FOUND {
@@ -40,7 +51,7 @@ var infoCmd = &cobra.Command{
 			return
 		}
 
-		table := p4.SearchTablebyId(tableId)
+		table := p4.SearchTableById(tableId)
 
 		if table.Name != "" {
 			fmt.Printf("%-12s: %-6s\n", "Table Name", table.Name)
@@ -75,6 +86,18 @@ var infoCmd = &cobra.Command{
 			fmt.Printf("%-12s:\n", "Table Data")
 			for _, v := range table.Data {
 				fmt.Printf("KeyId: %-6d, Name: %-20s, Mandatory: %-6t, Repeated: %-6t, Type: %-8s\n", v.Singleton.ID, v.Singleton.Name, v.Mandatory, v.Singleton.Repeated, v.Singleton.Type.Type)
+			}
+		}
+
+		if table.ActionSpecs != nil {
+			fmt.Println("==================================================================================================================================")
+			fmt.Printf("%-12s:\n", "Action Specs")
+			for _, v := range table.ActionSpecs {
+				fmt.Printf("Id: %-6d, Name: %-20s \n", v.ID, v.Name)
+				for _, d := range v.Data {
+					fmt.Printf("ParameterId: %-6d, Name: %-20s, Mandatory: %-6t, Repeated: %-6t, Type: %-8s, Width: %-4d\n", d.ID, d.Name, d.Mandatory, d.Repeated, d.Type.Type, d.Type.Width)
+				}
+
 			}
 		}
 	},

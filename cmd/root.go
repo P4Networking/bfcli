@@ -1,5 +1,5 @@
 /*
-Copyright © 2020 NAME HERE <EMAIL ADDRESS>
+Copyright © 2020 Chun Ming Ou <breezestars@gmail.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,21 +24,23 @@ import (
 	"github.com/spf13/viper"
 )
 
-var cfgFile string
-var server string
+var (
+	cfgFile string
+	server  string
+)
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "bfcli [flags] command",
 	Short: "A command tool to manipulate go-bfrt",
 	Long: `Bfcli is a CLI for manipulate go-bfrt.
-bfctl can list all tables, show information of table, set/delete flow and dump
-the existed flow.`,
+bfctl can list all tables, show information of table, set/remove flow and dump
+the existed flows.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Hello World")
-	},
+	//Run: func(cmd *cobra.Command, args []string) {
+	//	fmt.Println("Hello World")
+	//},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -56,13 +58,16 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.bfcli.yaml)")
+	//rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.bfcli.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "", "The server address")
-	rootCmd.MarkPersistentFlagRequired("server")
+	//rootCmd.MarkPersistentFlagRequired("server")
+	if server == "" {
+		server = ":50000"
+	}
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	//rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 // initConfig reads in config file and ENV variables if set.

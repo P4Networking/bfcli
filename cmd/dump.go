@@ -1,5 +1,5 @@
 /*
-Copyright © 2020 NAME HERE <EMAIL ADDRESS>
+Copyright © 2020 Chun Ming Ou <breezestars@gmail.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,52 +17,92 @@ package cmd
 
 import (
 	"fmt"
+	bfrt "github.com/breezestars/go-bfrt/proto/out"
+	"github.com/breezestars/go-bfrt/util"
 	"github.com/spf13/cobra"
+	"io"
+	"log"
+	"reflect"
+	"strings"
 )
 
 // dumpCmd represents the dump command
 var dumpCmd = &cobra.Command{
-	Use:   "dump",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "dump TABLE-NAME",
+	Args:  cobra.ExactArgs(1),
+	Short: "Dump the existed flows in specify table",
+	Long:  `Display all existed flows in specify table`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("dump called")
+		tableName := args[0]
 
-		//conn, err := grpc.Dial(":50000", grpc.WithInsecure(), grpc.WithBlock())
-		//if err != nil {
-		//	log.Fatalf("did not connect: %v", err)
-		//}
-		//defer conn.Close()
-		//cli := pb.NewConfigClient(conn)
-		//
-		//// Contact the server and print out its response.
-		//
-		//ctx, cancel := context.WithCancel(context.Background())
-		//defer cancel()
-		//
-		//rsp, err := cli.GetForwardingPipelineConfig(ctx, &pb.GetForwardingPipelineConfigRequest{DeviceId: uint32(77)})
-		//if err != nil {
-		//	fmt.Printf("Error with", err)
-		//}
-		//fmt.Printf("Got P4 name: %s \n", rsp.Config[0].P4Name)
-		//
-		//var p4, nonP4 util.BfRtInfoStruct
-		//err = gob.NewDecoder(bytes.NewReader(rsp.Config[0].BfruntimeInfo)).Decode(&p4)
-		//if err != nil {
-		//	log.Fatal("decode error 1:", err)
-		//}
-		//
-		//err = gob.NewDecoder(bytes.NewReader(rsp.NonP4Config.BfruntimeInfo)).Decode(&nonP4)
-		//if err != nil {
-		//	log.Fatal("decode error 1:", err)
-		//}
-		//fmt.Println("Got P4 first table name: ", p4.Tables[0].Name)
-		//fmt.Println("Got non-P4 first table name: ", nonP4.Tables[0].Name)
+		cliAddr, ctxAddr, conn, cancel, p4, _ := initConfigClient()
+		defer conn.Close()
+		defer cancel()
+		cli := *cliAddr
+		ctx := *ctxAddr
+
+		tableId := p4.SearchTableId(tableName)
+		if tableId == util.ID_NOT_FOUND {
+			fmt.Printf("Can not found table with name: %s\n", tableName)
+			return
+		}
+
+		req := &bfrt.ReadRequest{
+			Entities: []*bfrt.Entity{
+				{
+					Entity: &bfrt.Entity_TableEntry{
+						TableEntry: &bfrt.TableEntry{
+							TableId: p4.SearchTableId(tableName),
+						},
+					},
+				},
+			},
+		}
+
+		stream, err := cli.Read(ctx, req)
+		if err != nil {
+			log.Fatalf("Got error, %v \n", err.Error())
+		}
+
+		for {
+			rsp, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Fatalf("Got error: %v", err)
+			}
+			if len(rsp.GetEntities()) == 0 {
+				fmt.Printf("The flows in %s is null\n", tableName)
+			}
+			for _, v := range rsp.Entities {
+				tbl := v.GetTableEntry()
+				for _, f := range tbl.Key.Fields {
+					fmt.Printf("Match field ID: %d\n", f.FieldId)
+					switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
+					case "KeyField_Exact_":
+						m := f.GetExact()
+						fmt.Printf("Match field value: %x\n", m.Value)
+					case "KeyField_Ternary_":
+						t := f.GetTernary()
+						fmt.Printf("Ternary field value: %x, mask: %x\n", t.Value, t.Mask)
+					case "KeyField_Lpm":
+						l := f.GetLpm()
+						fmt.Printf("Lpm field value: %x, prefixLen: %d\n", l.Value, l.PrefixLen)
+					case "KeyField_Range_":
+						r := f.GetRange()
+						fmt.Printf("Range field high value: %x, low value: %x\n", r.High, r.Low)
+					}
+				}
+
+				printNameById(tbl.Data.ActionId)
+				for _, d := range tbl.Data.Fields {
+					fmt.Printf("Action parameter field ID: %d\n", d.FieldId)
+					printNameById(d.FieldId)
+					fmt.Printf("Action parameter value: %x\n", d.GetStream())
+				}
+			}
+		}
 	},
 }
 
