@@ -32,6 +32,15 @@ var dumpCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Short: "Dump the existed flows in specify table",
 	Long:  `Display all existed flows in specify table`,
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		_, _, conn, cancel, p4, _ := initConfigClient()
+		defer conn.Close()
+		defer cancel()
+
+		argsList, _ := p4.GuessTableName(toComplete)
+
+		return argsList, cobra.ShellCompDirectiveNoFileComp
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		tableName := args[0]
 
@@ -43,8 +52,13 @@ var dumpCmd = &cobra.Command{
 
 		tableId := p4.SearchTableId(tableName)
 		if tableId == util.ID_NOT_FOUND {
-			fmt.Printf("Can not found table with name: %s\n", tableName)
-			return
+			tableList, only := p4.GuessTableName(tableName)
+			if only {
+				tableName = tableList[0]
+			} else {
+				fmt.Printf("Can not found table with name: %s\n", tableName)
+				return
+			}
 		}
 
 		req := &bfrt.ReadRequest{
@@ -77,30 +91,35 @@ var dumpCmd = &cobra.Command{
 			}
 			for _, v := range rsp.Entities {
 				tbl := v.GetTableEntry()
-				for _, f := range tbl.Key.Fields {
-					fmt.Printf("Match field ID: %d\n", f.FieldId)
-					switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
-					case "KeyField_Exact_":
-						m := f.GetExact()
-						fmt.Printf("Match field value: %x\n", m.Value)
-					case "KeyField_Ternary_":
-						t := f.GetTernary()
-						fmt.Printf("Ternary field value: %x, mask: %x\n", t.Value, t.Mask)
-					case "KeyField_Lpm":
-						l := f.GetLpm()
-						fmt.Printf("Lpm field value: %x, prefixLen: %d\n", l.Value, l.PrefixLen)
-					case "KeyField_Range_":
-						r := f.GetRange()
-						fmt.Printf("Range field high value: %x, low value: %x\n", r.High, r.Low)
+				if tbl.GetKey() != nil {
+					for _, f := range tbl.Key.Fields {
+						fmt.Printf("Match field ID: %d\n", f.FieldId)
+						switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
+						case "KeyField_Exact_":
+							m := f.GetExact()
+							fmt.Printf("Match field value: %x\n", m.Value)
+						case "KeyField_Ternary_":
+							t := f.GetTernary()
+							fmt.Printf("Ternary field value: %x, mask: %x\n", t.Value, t.Mask)
+						case "KeyField_Lpm":
+							l := f.GetLpm()
+							fmt.Printf("Lpm field value: %x, prefixLen: %d\n", l.Value, l.PrefixLen)
+						case "KeyField_Range_":
+							r := f.GetRange()
+							fmt.Printf("Range field high value: %x, low value: %x\n", r.High, r.Low)
+						}
 					}
+				} else {
+					fmt.Printf("Table default action:\n")
 				}
-
 				printNameById(tbl.Data.ActionId)
-				for _, d := range tbl.Data.Fields {
-					fmt.Printf("Action parameter field ID: %d\n", d.FieldId)
-					printNameById(d.FieldId)
-					fmt.Printf("Action parameter value: %x\n", d.GetStream())
-				}
+				fmt.Printf("------------------\n")
+				//for _, d := range tbl.Data.Fields {
+				//	fmt.Printf("Action parameter field ID: %d\n", d.FieldId)
+				//	printNameById(d.FieldId)
+				//	fmt.Printf("Action parameter value: %x\n", d.GetStream())
+				//}
+
 			}
 		}
 	},
