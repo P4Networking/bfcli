@@ -113,13 +113,14 @@ var dumpCmd = &cobra.Command{
 					fmt.Printf("Table default action:\n")
 				}
 				printNameById(tbl.Data.ActionId)
+				if tbl.Data.Fields != nil {
+					for _, d := range tbl.Data.Fields {
+						fmt.Printf("Action parameter field ID: %d\n", d.FieldId)
+						printNameById(d.FieldId)
+						fmt.Printf("Action parameter value: %x\n", d.GetStream())
+					}
+				}
 				fmt.Printf("------------------\n")
-				//for _, d := range tbl.Data.Fields {
-				//	fmt.Printf("Action parameter field ID: %d\n", d.FieldId)
-				//	printNameById(d.FieldId)
-				//	fmt.Printf("Action parameter value: %x\n", d.GetStream())
-				//}
-
 			}
 		}
 	},
