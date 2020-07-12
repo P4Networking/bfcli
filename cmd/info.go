@@ -28,11 +28,11 @@ var infoCmd = &cobra.Command{
 	Short: "Show information about table",
 	Long:  `Display the detail of table.`,
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		_, _, conn, cancel, p4, _ := initConfigClient()
+		_, _, conn, cancel, p4Info, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
 
-		argsList, _ := p4.GuessTableName(toComplete)
+		argsList, _ := p4Info.GuessTableName(toComplete)
 
 		return argsList, cobra.ShellCompDirectiveNoFileComp
 	},
@@ -40,14 +40,14 @@ var infoCmd = &cobra.Command{
 		//fmt.Printf("Got cmd: %s | and args: %s\n", cmd.Name(), args)
 		var tableName string
 
-		_, _, conn, cancel, p4, _ := initConfigClient()
+		_, _, conn, cancel, p4Info, nonP4Info := initConfigClient()
 		defer conn.Close()
 		defer cancel()
 
 		// Guest table name via table name provide form user
-		tableList, ok := p4.GuessTableName(args[0])
+		tableList, ok := p4Info.GuessTableName(args[0])
 		if !ok {
-			tableList, ok = nonP4.GuessTableName(args[0])
+			tableList, ok = nonP4Info.GuessTableName(args[0])
 			if !ok {
 				fmt.Printf("Not found the table %s\n", args[0])
 				return
@@ -55,13 +55,13 @@ var infoCmd = &cobra.Command{
 		}
 		tableName = tableList[0]
 
-		tableId := p4.SearchTableId(tableName)
+		tableId := p4Info.SearchTableId(tableName)
 		if tableId == util.ID_NOT_FOUND {
 			fmt.Printf("Can not found table with name: %s\n", tableName)
 			return
 		}
 
-		table := p4.SearchTableById(tableId)
+		table := p4Info.SearchTableById(tableId)
 
 		if table.Name != "" {
 			fmt.Printf("%-12s: %-6s\n", "Table Name", table.Name)

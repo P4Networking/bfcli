@@ -17,7 +17,7 @@ package cmd
 
 import (
 	"fmt"
-	bfrt "github.com/breezestars/go-bfrt/proto/out"
+	"github.com/breezestars/bfruntime/go/p4"
 	"github.com/breezestars/go-bfrt/util"
 	"github.com/spf13/cobra"
 	"io"
@@ -33,26 +33,26 @@ var dumpCmd = &cobra.Command{
 	Short: "Dump the existed flows in specify table",
 	Long:  `Display all existed flows in specify table`,
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		_, _, conn, cancel, p4, _ := initConfigClient()
+		_, _, conn, cancel, p4Info, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
 
-		argsList, _ := p4.GuessTableName(toComplete)
+		argsList, _ := p4Info.GuessTableName(toComplete)
 
 		return argsList, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		tableName := args[0]
 
-		cliAddr, ctxAddr, conn, cancel, p4, _ := initConfigClient()
+		cliAddr, ctxAddr, conn, cancel, p4Info, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
 		cli := *cliAddr
 		ctx := *ctxAddr
 
-		tableId := p4.SearchTableId(tableName)
+		tableId := p4Info.SearchTableId(tableName)
 		if tableId == util.ID_NOT_FOUND {
-			tableList, only := p4.GuessTableName(tableName)
+			tableList, only := p4Info.GuessTableName(tableName)
 			if only {
 				tableName = tableList[0]
 			} else {
@@ -61,12 +61,12 @@ var dumpCmd = &cobra.Command{
 			}
 		}
 
-		req := &bfrt.ReadRequest{
-			Entities: []*bfrt.Entity{
+		req := &p4.ReadRequest{
+			Entities: []*p4.Entity{
 				{
-					Entity: &bfrt.Entity_TableEntry{
-						TableEntry: &bfrt.TableEntry{
-							TableId: p4.SearchTableId(tableName),
+					Entity: &p4.Entity_TableEntry{
+						TableEntry: &p4.TableEntry{
+							TableId: p4Info.SearchTableId(tableName),
 						},
 					},
 				},
