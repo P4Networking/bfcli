@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
-	"github.com/breezestars/bfruntime/go/p4"
-	"github.com/breezestars/go-bfrt/util"
+	"github.com/P4Networking/pisc/util"
+	"github.com/P4Networking/proto/go/p4"
 	"google.golang.org/grpc"
 	"log"
 )

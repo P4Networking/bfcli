@@ -17,7 +17,7 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/breezestars/go-bfrt/util"
+	"github.com/P4Networking/pisc/util"
 	"github.com/spf13/cobra"
 )
 

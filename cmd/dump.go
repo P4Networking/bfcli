@@ -17,8 +17,8 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/breezestars/bfruntime/go/p4"
-	"github.com/breezestars/go-bfrt/util"
+	"github.com/P4Networking/pisc/util"
+	"github.com/P4Networking/proto/go/p4"
 	"github.com/spf13/cobra"
 	"io"
 	"log"

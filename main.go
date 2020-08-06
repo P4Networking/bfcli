@@ -15,7 +15,7 @@ limitations under the License.
 */
 package main
 
-import "gitHub.com/breezestars/bfcli/cmd"
+import "github.com/P4Networking/bfcli/cmd"
 
 func main() {
 	cmd.Execute()
