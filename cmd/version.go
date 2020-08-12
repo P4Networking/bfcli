@@ -24,8 +24,8 @@ import (
 // versionCmd represents the version command
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Show the bfcli version information",
-	Long: `Show the bfcli version information`,
+	Short: "Show the pisc-cli version information",
+	Long: `Show the pisc-cli version information`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("version called")
 	},

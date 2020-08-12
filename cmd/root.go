@@ -31,9 +31,9 @@ var (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "bfcli [flags] command",
+	Use:   "pisc-clie [flags] command",
 	Short: "A command tool to manipulate go-bfrt",
-	Long: `Bfcli is a CLI for manipulate go-bfrt.
+	Long: `pisc-cli is a CLI for manipulate go-bfrt.
 bfctl can list all tables, show information of table, set/remove flow and dump
 the existed flows.`,
 	// Uncomment the following line if your bare application
@@ -58,7 +58,7 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	//rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.bfcli.yaml)")
+	//rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.pisc-cli.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "", "The server address")
 	//rootCmd.MarkPersistentFlagRequired("server")
 
@@ -80,9 +80,9 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		// Search config in home directory with name ".bfcli" (without extension).
+		// Search config in home directory with name ".pisc-cli" (without extension).
 		viper.AddConfigPath(home)
-		viper.SetConfigName(".bfcli")
+		viper.SetConfigName(".pisc-cli")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match

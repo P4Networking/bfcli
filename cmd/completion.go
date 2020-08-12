@@ -27,7 +27,7 @@ var completionCmd = &cobra.Command{
 	Short: "Generates bash completion scripts",
 	Long: `To load completion run
 
-. <(bfcli completion)`,
+. <(pisc-cli completion)`,
 	Run: func(cmd *cobra.Command, args []string) {
 		rootCmd.GenBashCompletion(os.Stdout)
 	},
