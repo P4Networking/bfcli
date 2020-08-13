@@ -123,7 +123,7 @@ var setFlowCmd = &cobra.Command{
 			} else if v.matchType == enums.MATCH_TERNARY {
 				if MLT ==  MASK_TYPE {
 					arg := strings.Split(matchLists[k-1], "/")
-					switch checkMask(matchLists[k-1]) {
+					switch checkMaskType(matchLists[k-1]) {
 					case IP_MASK:
 						match = append(match, util.GenKeyField(v.matchType, uint32(k), util.Ipv4ToBytes(arg[0]), util.Ipv4ToBytes(arg[1])))
 					case ETH_MASK:

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
-	"fmt"
 	"github.com/P4Networking/pisc/util"
 	"github.com/P4Networking/pisc/util/enums"
 	"github.com/P4Networking/proto/go/p4"
@@ -84,37 +83,35 @@ func initConfigClient() (*p4.BfRuntimeClient, *context.Context, *grpc.ClientConn
 	return &cli, &ctx, conn, cancel, &p4Info, &nonP4Info
 }
 
-func printNameById(id uint32) bool {
+func printNameById(id uint32) (string, bool) {
 	var name string
 	var ok bool
 
 	name, ok = p4Info.SearchActionNameById(id)
 	if ok == true {
-		fmt.Printf("Action Name: %s \n", name)
-		return FOUND
-	}
-
-	name, ok = nonP4Info.SearchActionParameterNameById(id)
-	if ok == true {
-		fmt.Printf("Action Parameter Name: %s \n", name)
-		return FOUND
+		return name, FOUND
 	}
 
 	name, ok = p4Info.SearchDataNameById(id)
 	if ok == true {
-		fmt.Printf("Data Name: %s \n", name)
-		return FOUND
+		return name, FOUND
 	}
-	return NOT_FOUND
+
+	name, ok = p4Info.SearchActionParameterNameById(id)
+	if ok == true {
+		return name, FOUND
+	}
+
+	return "",NOT_FOUND
 }
 
 func collectTableMatchTypes(table *util.Table) (map[int]MatchSet, bool) {
 	m := make(map[int]MatchSet)
 	for _, v := range table.Key {
-		bw := checkBitWidth(v.Type.Width)
 		if v.ID == 65537 || v.Name == "$MATCH_PRIORITY" {
 			continue
 		}
+		bw := checkBitWidth(v.Type.Width)
 		switch v.MatchType {
 		case "Exact" :
 			m[v.ID] = MatchSet{matchType: enums.MATCH_EXACT, bitWidth: bw}
@@ -160,7 +157,7 @@ func checkMatchListType(value string) uint {
 		return IP_TYPE
 	} else if c, n, _ := net.ParseCIDR(value); c != nil && n != nil {
 		return CIDR_TYPE
-	} else if maskType := checkMask(value); maskType != -1 {
+	} else if checkMaskType(value) != -1 {
 		return MASK_TYPE
 	}else if IsNumber(value) {
 		return VALUE_TYPE
@@ -175,7 +172,7 @@ case 2 : both arguments are hex presentation (for ethertype, etc...)
 case 3 : both arguments are integer
 Caution : out of range of the cases are not handled.
 */
-func checkMask(value string) int {
+func checkMaskType(value string) int {
 	if strings.Contains(value, "/") {
 		arg := strings.Split(value, "/")
 		m1, _ := net.ParseMAC(arg[0])

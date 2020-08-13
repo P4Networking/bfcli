@@ -32,9 +32,9 @@ var (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "pisc-clie [flags] command",
-	Short: "A command tool to manipulate go-bfrt",
-	Long: `pisc-cli is a CLI for manipulate go-bfrt.
-bfctl can list all tables, show information of table, set/remove flow and dump
+	Short: "A command tool to manipulate pisc",
+	Long: `pisc-cli is a CLI for manipulate pisc.
+pisc-cli can list all tables, show information of table, set/remove flow and dump
 the existed flows.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:

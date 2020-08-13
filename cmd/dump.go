@@ -26,6 +26,8 @@ import (
 	"strings"
 )
 
+var endFlag bool = false
+
 // dumpCmd represents the dump command
 var dumpCmd = &cobra.Command{
 	Use:   "dump TABLE-NAME",
@@ -89,39 +91,54 @@ var dumpCmd = &cobra.Command{
 			if len(rsp.GetEntities()) == 0 {
 				fmt.Printf("The flows in %s is null\n", tableName)
 			}
+			fmt.Println("--------------------------------------------------------------------------------")
 			for _, v := range rsp.Entities {
 				tbl := v.GetTableEntry()
+				fmt.Println("Match Key Info")
 				if tbl.GetKey() != nil {
-					for _, f := range tbl.Key.Fields {
-						fmt.Printf("Match field ID: %d\n", f.FieldId)
+					fmt.Printf("  %-20s %-10s %-16s\n", "Field Name:", "Type:", "Value:")
+					for k, f := range tbl.Key.Fields {
+						if f.FieldId == 65537 {
+							continue
+						}
+						//fmt.Println(p4Info.SearchTableById(tbl.TableId).Name)
+						MatchfieldName := p4Info.SearchTableById(tbl.TableId).Key[k].Name
 						switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
 						case "KeyField_Exact_":
 							m := f.GetExact()
-							fmt.Printf("Match field value: %x\n", m.Value)
+							fmt.Printf("  %-20s %-10s %-16d\n", MatchfieldName, "Exact" ,m.Value)
 						case "KeyField_Ternary_":
 							t := f.GetTernary()
-							fmt.Printf("Ternary field value: %x, mask: %x\n", t.Value, t.Mask)
+							fmt.Printf("  %-20s %-10s %-16x Mask: %-12x\n", MatchfieldName, "Ternay" ,t.Value, t.Mask)
 						case "KeyField_Lpm":
 							l := f.GetLpm()
-							fmt.Printf("Lpm field value: %x, prefixLen: %d\n", l.Value, l.PrefixLen)
+							fmt.Printf("  %-20s %-10s %-16x PreFix: %-12x\n", MatchfieldName, "LPM" ,l.Value, l.PrefixLen)
 						case "KeyField_Range_":
+							//It will be adjust when range match implement.
 							r := f.GetRange()
-							fmt.Printf("Range field high value: %x, low value: %x\n", r.High, r.Low)
+							fmt.Printf("  %-20s %-10s %-16x High: %-6x Low: %-6x\n", MatchfieldName, "LPM" ,r.High, r.Low)
 						}
 					}
 				} else {
 					fmt.Printf("Table default action:\n")
+					endFlag = true
 				}
-				printNameById(tbl.Data.ActionId)
+
+				actionName, _ := printNameById(tbl.Data.ActionId)
+				fmt.Println("Action:", actionName)
+
 				if tbl.Data.Fields != nil {
+					fmt.Printf("  %-10s %-16s\n", "Field:", "Value:")
 					for _, d := range tbl.Data.Fields {
-						fmt.Printf("Action parameter field ID: %d\n", d.FieldId)
-						printNameById(d.FieldId)
-						fmt.Printf("Action parameter value: %x\n", d.GetStream())
+						actionFieldName, _ := printNameById(d.FieldId)
+						fmt.Printf("  %-10s %-16x\n",actionFieldName, d.GetStream())
 					}
 				}
-				fmt.Printf("------------------\n")
+				if !endFlag {
+					fmt.Printf("------------------\n")
+				}
 			}
+			fmt.Println("--------------------------------------------------------------------------------")
 		}
 	},
 }

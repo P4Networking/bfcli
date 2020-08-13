@@ -46,6 +46,14 @@ var infoCmd = &cobra.Command{
 
 		// Guest table name via table name provide form user
 		tableList, ok := p4Info.GuessTableName(args[0])
+		if len(tableList) > 1 {
+			for _, v := range tableList {
+				if args[0] == v {
+					tableName = v
+					ok = true
+				}
+			}
+		}
 		if !ok {
 			tableList, ok = nonP4Info.GuessTableName(args[0])
 			if !ok {
@@ -53,7 +61,6 @@ var infoCmd = &cobra.Command{
 				return
 			}
 		}
-		tableName = tableList[0]
 
 		tableId := p4Info.SearchTableId(tableName)
 		if tableId == util.ID_NOT_FOUND {
