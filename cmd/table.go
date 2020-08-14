@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	all bool
+	full bool
 )
 
 // tableCmd represents the table command
@@ -40,7 +40,7 @@ var tableCmd = &cobra.Command{
 			fmt.Println(v.Name)
 		}
 
-		if all {
+		if full {
 			fmt.Println("------ The following is for non-P4 table ------")
 			for _, v := range nonP4Info.Tables {
 				fmt.Println(v.Name)
@@ -51,7 +51,7 @@ var tableCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(tableCmd)
-	tableCmd.Flags().BoolVarP(&all, "all", "a", false, "Show all tables")
+	tableCmd.Flags().BoolVarP(&full, "full", "f", false, "Show all tables")
 
 	// Here you will define your flags and configuration settings.
 

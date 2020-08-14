@@ -35,7 +35,7 @@ var (
 )
 // setFlowCmd represents the setFlow command
 var setFlowCmd = &cobra.Command{
-	Use:   "set-flow TABLE_NAME ACTION-NAME -mk \"match key,...\" -av \"action value,...\" ",
+	Use:   "set-flow TABLE_NAME ACTION-NAME -m \"match key,...\" -a \"action value,...\" ",
 	Short: "Set flow into table",
 	Long: `Insert flow into specific table with specific action`,
 	Args: cobra.MinimumNArgs(2),
@@ -52,13 +52,8 @@ var setFlowCmd = &cobra.Command{
 
 		tableId := p4Info.SearchTableId(tableName)
 		if tableId == util.ID_NOT_FOUND {
-			tableList, only := p4Info.GuessTableName(tableName)
-			if only {
-				tableName = tableList[0]
-			} else {
-				fmt.Printf("Can not found table with name: %s\n", tableName)
-				return
-			}
+			fmt.Printf("Can not found table with name: %s\n", tableName)
+			return
 		}
 		table := p4Info.SearchTableById(tableId)
 
@@ -77,7 +72,7 @@ var setFlowCmd = &cobra.Command{
 		}
 
 		if len(collectedMatchTypes) != len(matchLists) {
-			fmt.Println("Length of Match Type dosn't matched with Length of table args")
+			fmt.Println("Length of Match keys doesn't matched with Length of args")
 			fmt.Println(collectedMatchTypes, matchLists)
 			return
 		}
@@ -115,6 +110,7 @@ var setFlowCmd = &cobra.Command{
 				if MLT == CIDR_TYPE {
 					arg := strings.Split(matchLists[k-1], "/")
 					subnet, _ := strconv.Atoi(arg[1])
+					fmt.Printf("prefix : %d\n", subnet)
 					match = append(match, util.GenKeyField(v.matchType, uint32(k), util.Ipv4ToBytes(arg[0]), subnet))
 				} else {
 					fmt.Printf("Unexpect value for LPM_MATCH : %s\n", matchLists[k-1])
@@ -142,9 +138,9 @@ var setFlowCmd = &cobra.Command{
 					return
 				}
 			} else if v.matchType == enums.MATCH_RANGE {
-				//Not implemented yet.
+				//TODO: Implement range match
 			} else {
-				fmt.Println("Unexpected Match type")
+				fmt.Println("Unexpected Match Type")
 			}
 		}
 

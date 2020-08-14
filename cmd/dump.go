@@ -26,8 +26,6 @@ import (
 	"strings"
 )
 
-var endFlag bool = false
-
 // dumpCmd represents the dump command
 var dumpCmd = &cobra.Command{
 	Use:   "dump TABLE-NAME",
@@ -54,18 +52,18 @@ var dumpCmd = &cobra.Command{
 
 		tableId := p4Info.SearchTableId(tableName)
 		if tableId == util.ID_NOT_FOUND {
-			tableList, only := p4Info.GuessTableName(tableName)
-			if only {
-				tableName = tableList[0]
-			} else {
-				fmt.Printf("Can not found table with name: %s\n", tableName)
-				return
-			}
+			fmt.Printf("Can not found table with name: %s\n", tableName)
+			return
+		}
+		table := p4Info.SearchTableById(tableId)
+		if table == nil {
+			fmt.Printf("Can not found table with ID: %s\n", tableId)
+			return
 		}
 
 		req := &p4.ReadRequest{
 			Entities: []*p4.Entity{
-				{
+			{
 					Entity: &p4.Entity_TableEntry{
 						TableEntry: &p4.TableEntry{
 							TableId: p4Info.SearchTableId(tableName),
@@ -88,11 +86,12 @@ var dumpCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("Got error: %v", err)
 			}
-			if len(rsp.GetEntities()) == 0 {
+			Entities := rsp.GetEntities()
+			if len(Entities) == 0 {
 				fmt.Printf("The flows in %s is null\n", tableName)
 			}
 			fmt.Println("--------------------------------------------------------------------------------")
-			for _, v := range rsp.Entities {
+			for k, v := range Entities {
 				tbl := v.GetTableEntry()
 				fmt.Println("Match Key Info")
 				if tbl.GetKey() != nil {
@@ -101,27 +100,26 @@ var dumpCmd = &cobra.Command{
 						if f.FieldId == 65537 {
 							continue
 						}
-						//fmt.Println(p4Info.SearchTableById(tbl.TableId).Name)
-						MatchfieldName := p4Info.SearchTableById(tbl.TableId).Key[k].Name
 						switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
 						case "KeyField_Exact_":
 							m := f.GetExact()
-							fmt.Printf("  %-20s %-10s %-16d\n", MatchfieldName, "Exact" ,m.Value)
+							fmt.Printf("  %-20s %-10s %-16d\n", table.Key[k].Name, "Exact" ,m.Value)
 						case "KeyField_Ternary_":
 							t := f.GetTernary()
-							fmt.Printf("  %-20s %-10s %-16x Mask: %-12x\n", MatchfieldName, "Ternay" ,t.Value, t.Mask)
+							fmt.Printf("  %-20s %-10s %-16x Mask: %-12x\n", table.Key[k].Name, "Ternay" ,t.Value, t.Mask)
 						case "KeyField_Lpm":
 							l := f.GetLpm()
-							fmt.Printf("  %-20s %-10s %-16x PreFix: %-12x\n", MatchfieldName, "LPM" ,l.Value, l.PrefixLen)
+							fmt.Printf("  %-20s %-10s %-16x PreFix: %-12d\n", table.Key[k].Name, "LPM" ,l.Value, l.PrefixLen)
 						case "KeyField_Range_":
-							//It will be adjust when range match implement.
+							//TODO: Implement range match
 							r := f.GetRange()
-							fmt.Printf("  %-20s %-10s %-16x High: %-6x Low: %-6x\n", MatchfieldName, "LPM" ,r.High, r.Low)
+							fmt.Printf("  %-20s %-10s %-16x High: %-6x Low: %-6x\n", table.Key[k].Name, "LPM" ,r.High, r.Low)
 						}
 					}
-				} else {
+				}
+
+				if tbl.IsDefaultEntry {
 					fmt.Printf("Table default action:\n")
-					endFlag = true
 				}
 
 				actionName, _ := printNameById(tbl.Data.ActionId)
@@ -134,7 +132,7 @@ var dumpCmd = &cobra.Command{
 						fmt.Printf("  %-10s %-16x\n",actionFieldName, d.GetStream())
 					}
 				}
-				if !endFlag {
+				if(k+1!=len(Entities)){
 					fmt.Printf("------------------\n")
 				}
 			}

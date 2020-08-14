@@ -31,7 +31,7 @@ var infoCmd = &cobra.Command{
 		_, _, conn, cancel, p4Info, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
-
+		fmt.Println("in!")
 		argsList, _ := p4Info.GuessTableName(toComplete)
 
 		return argsList, cobra.ShellCompDirectiveNoFileComp
@@ -46,7 +46,7 @@ var infoCmd = &cobra.Command{
 
 		// Guest table name via table name provide form user
 		tableList, ok := p4Info.GuessTableName(args[0])
-		if len(tableList) > 1 {
+		if len(tableList) > 0 {
 			for _, v := range tableList {
 				if args[0] == v {
 					tableName = v
