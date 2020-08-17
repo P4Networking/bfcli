@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
 	"github.com/P4Networking/pisc/util"
 	"github.com/P4Networking/pisc/util/enums"
 	"github.com/P4Networking/proto/go/p4"
 	"google.golang.org/grpc"
+	"io"
 	"log"
 	"net"
+	"reflect"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -151,11 +155,11 @@ func IsNumber(s string) bool {
 }
 
 func checkMatchListType(value string) uint {
-	if 	m, _ := net.ParseMAC(value); m != nil {
+	if strings.ContainsAny(value, ":") {
 		return MAC_TYPE
-	} else if i := net.ParseIP(value); i != nil {
+	} else if strings.ContainsAny(value, ".") {
 		return IP_TYPE
-	} else if c, n, _ := net.ParseCIDR(value); c != nil && n != nil {
+	} else if c, n, _ := net.ParseCIDR(value); (c != nil && n != nil) || strings.Contains(value, "/") {
 		return CIDR_TYPE
 	} else if checkMaskType(value) != -1 {
 		return MASK_TYPE
@@ -215,4 +219,119 @@ func ParseBitWidth(value int, bitWidth int) []byte {
 		result = util.Int8ToBytes(uint8(value))
 	}
 	return result
+}
+
+func Ipv4ToBytes(value string) []byte {
+	nameSplit := strings.Split(value, ".")
+	if len(nameSplit) > 4 || len(nameSplit) < 1 {
+		return nil
+	}
+	result := make([]byte, len(nameSplit))
+	for k, v := range nameSplit {
+		value, err := strconv.Atoi(v)
+		if err != nil {
+			panic(err)
+		}
+		result[k] = byte(value)
+	}
+	return result
+}
+
+func MacToBytes(macAddress string) []byte {
+	macSplit := strings.Split(macAddress, ":")
+	if len(macSplit) > 5 || len(macSplit) < 1 {
+		return nil
+	}
+	result := make([]byte, len(macSplit))
+	for k, v := range macSplit {
+		data, err := strconv.ParseInt(v, 16, 64)
+		if err != nil {
+			panic(err)
+		}
+		result[k] = byte(data)
+	}
+	return result
+}
+
+
+func dumpEntries(stream *p4.BfRuntime_ReadClient, table *util.Table) {
+	for {
+		rsp, err := (*stream).Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatalf("Got error: %v", err)
+		}
+		fmt.Println("--------------------------------------------------------------------------------")
+		Entities := rsp.GetEntities()
+		if len(Entities) == 0 {
+			fmt.Printf("The \"%s\" table is empty\n", table.Name)
+		}
+		for k, v := range Entities {
+			tbl := v.GetTableEntry()
+			if !tbl.IsDefaultEntry {
+				fmt.Printf("Entry %d:\n", k)
+			}
+			fmt.Println("Match Key Info")
+			if tbl.GetKey() != nil {
+				fmt.Printf("  %-20s %-10s %-16s\n", "Field Name:", "Type:", "Value:")
+				for k, f := range tbl.Key.Fields {
+					if f.FieldId == 65537 {
+						continue
+					}
+					switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
+					case "KeyField_Exact_":
+						m := f.GetExact()
+						fmt.Printf("  %-20s %-10s %-16x\n", table.Key[k].Name, "Exact" ,m.Value)
+					case "KeyField_Ternary_":
+						t := f.GetTernary()
+						fmt.Printf("  %-20s %-10s %-16x Mask: %-12x\n", table.Key[k].Name, "Ternay" ,t.Value, t.Mask)
+					case "KeyField_Lpm":
+						l := f.GetLpm()
+						fmt.Printf("  %-20s %-10s %-16x PreFix: %-12d\n", table.Key[k].Name, "LPM" ,l.Value, l.PrefixLen)
+					case "KeyField_Range_":
+						//TODO: Implement range match
+						r := f.GetRange()
+						fmt.Printf("  %-20s %-10s %-16x High: %-6x Low: %-6x\n", table.Key[k].Name, "LPM" ,r.High, r.Low)
+					}
+				}
+			}
+
+			if tbl.IsDefaultEntry {
+				fmt.Printf("Table default action:\n")
+			}
+
+			actionName, _ := printNameById(tbl.Data.ActionId)
+			fmt.Println("Action:", actionName)
+
+			if tbl.Data.Fields != nil {
+				fmt.Printf("  %-20s %-16s\n", "Field Name:", "Value:")
+				for _, d := range tbl.Data.Fields {
+					actionFieldName, _ := printNameById(d.FieldId)
+					fmt.Printf("  %-20s %-16x\n",actionFieldName, d.GetStream())
+				}
+			}
+			if(k+1!=len(Entities)){
+				fmt.Printf("------------------\n")
+			}
+		}
+		fmt.Println("--------------------------------------------------------------------------------")
+	}
+}
+
+
+func GenReadRequestWithId(tableId uint32) *p4.ReadRequest {
+	req := &p4.ReadRequest{
+		Entities: []*p4.Entity{
+			{
+				Entity: &p4.Entity_TableEntry{
+					TableEntry: &p4.TableEntry{
+						TableId: tableId,
+					},
+				},
+			},
+		},
+	}
+	return req
 }

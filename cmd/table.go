@@ -35,7 +35,7 @@ var tableCmd = &cobra.Command{
 		defer conn.Close()
 		defer cancel()
 
-		//fmt.Println("------ The following is for P4 table ------")
+		fmt.Println("------ The following is for P4 table ------")
 		for _, v := range p4Info.Tables {
 			fmt.Println(v.Name)
 		}
@@ -51,7 +51,7 @@ var tableCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(tableCmd)
-	tableCmd.Flags().BoolVarP(&full, "full", "f", false, "Show all tables")
+	tableCmd.Flags().BoolVarP(&full, "full", "f", false, "list all of the tables from device")
 
 	// Here you will define your flags and configuration settings.
 

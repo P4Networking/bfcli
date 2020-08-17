@@ -24,21 +24,17 @@ import (
 // infoCmd represents the info command
 var infoCmd = &cobra.Command{
 	Use:   "info TABLE-NAME",
-	Args:  cobra.ExactArgs(1),
 	Short: "Show information about table",
 	Long:  `Display the detail of table.`,
+	Args:  cobra.ExactArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		_, _, conn, cancel, p4Info, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
-		fmt.Println("in!")
 		argsList, _ := p4Info.GuessTableName(toComplete)
-
 		return argsList, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		//fmt.Printf("Got cmd: %s | and args: %s\n", cmd.Name(), args)
-		var tableName string
 
 		_, _, conn, cancel, p4Info, nonP4Info := initConfigClient()
 		defer conn.Close()
@@ -49,22 +45,23 @@ var infoCmd = &cobra.Command{
 		if len(tableList) > 0 {
 			for _, v := range tableList {
 				if args[0] == v {
-					tableName = v
 					ok = true
 				}
 			}
 		}
+
+		//TODO: info.go doesn't show nonP4info information.
 		if !ok {
 			tableList, ok = nonP4Info.GuessTableName(args[0])
 			if !ok {
-				fmt.Printf("Not found the table %s\n", args[0])
+				fmt.Printf("Can not found the table %s\n", args[0])
 				return
 			}
 		}
 
-		tableId := p4Info.SearchTableId(tableName)
+		tableId := p4Info.SearchTableId(args[0])
 		if tableId == util.ID_NOT_FOUND {
-			fmt.Printf("Can not found table with name: %s\n", tableName)
+			fmt.Printf("Can not found table with name: %s\n", args[0])
 			return
 		}
 

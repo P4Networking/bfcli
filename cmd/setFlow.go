@@ -28,17 +28,15 @@ import (
 
 
 var (
-	//Name list of the match field
 	matchLists [] string
-	//value list fo the action field
 	actionValues []string
 )
 // setFlowCmd represents the setFlow command
 var setFlowCmd = &cobra.Command{
-	Use:   "set-flow TABLE_NAME ACTION-NAME -m \"match key,...\" -a \"action value,...\" ",
+	Use:   "set-flow TABLE_NAME ACTION-NAME ",
 	Short: "Set flow into table",
-	Long: `Insert flow into specific table with specific action`,
-	Args: cobra.MinimumNArgs(2),
+	Long: `Insert the flow to table with action`,
+	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		tableName := args[0]
@@ -96,9 +94,9 @@ var setFlowCmd = &cobra.Command{
 			if v.matchType == enums.MATCH_EXACT {
 				switch MLT {
 				case MAC_TYPE:
-					match = append(match, util.GenKeyField(v.matchType, uint32(k), util.MacToBytes(matchLists[k-1])))
+					match = append(match, util.GenKeyField(v.matchType, uint32(k), MacToBytes(matchLists[k-1])))
 				case IP_TYPE:
-					match = append(match, util.GenKeyField(v.matchType, uint32(k), util.Ipv4ToBytes(matchLists[k-1])))
+					match = append(match, util.GenKeyField(v.matchType, uint32(k), Ipv4ToBytes(matchLists[k-1])))
 				case VALUE_TYPE:
 					arg, _ := strconv.Atoi(matchLists[k-1])
 					match = append(match, util.GenKeyField(v.matchType, uint32(k), ParseBitWidth(arg, v.bitWidth)))
@@ -110,7 +108,6 @@ var setFlowCmd = &cobra.Command{
 				if MLT == CIDR_TYPE {
 					arg := strings.Split(matchLists[k-1], "/")
 					subnet, _ := strconv.Atoi(arg[1])
-					fmt.Printf("prefix : %d\n", subnet)
 					match = append(match, util.GenKeyField(v.matchType, uint32(k), util.Ipv4ToBytes(arg[0]), subnet))
 				} else {
 					fmt.Printf("Unexpect value for LPM_MATCH : %s\n", matchLists[k-1])
@@ -151,7 +148,7 @@ var setFlowCmd = &cobra.Command{
 				case MAC_TYPE:
 					action = append(action, util.GenDataField(uint32(k), util.MacToBytes(actionValues[k-1])))
 				case IP_TYPE:
-					action = append(action, util.GenDataField(uint32(k), util.Ipv4ToBytes(actionValues[k-1])))
+					action = append(action, util.GenDataField(uint32(k), Ipv4ToBytes(actionValues[k-1])))
 				case VALUE_TYPE:
 					actionValue, _ := strconv.ParseInt(actionValues[k-1], 10, 32)
 					var result []byte
@@ -184,6 +181,6 @@ var setFlowCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(setFlowCmd)
-	setFlowCmd.Flags().StringSliceVarP(&matchLists, "match key", "m", []string{}, "")
-	setFlowCmd.Flags().StringSliceVarP(&actionValues, "action value", "a", []string{}, "")
+	setFlowCmd.Flags().StringSliceVarP(&matchLists, "match", "m", []string{}, "match arguments")
+	setFlowCmd.Flags().StringSliceVarP(&actionValues, "action", "a", []string{}, "action arguments")
 }

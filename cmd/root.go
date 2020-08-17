@@ -27,11 +27,12 @@ import (
 var (
 	cfgFile string
 	server  string
+	all bool
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "pisc-clie [flags] command",
+	Use:   "pisc-cli [flags] command",
 	Short: "A command tool to manipulate pisc",
 	Long: `pisc-cli is a CLI for manipulate pisc.
 pisc-cli can list all tables, show information of table, set/remove flow and dump
