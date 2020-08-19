@@ -40,7 +40,7 @@ var delFlowCmd = &cobra.Command{
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var tableName string
-		if !all && len(args) > 0 {
+		if all && len(args) > 0 {
 			tableName = args[0]
 		}
 
@@ -54,7 +54,7 @@ var delFlowCmd = &cobra.Command{
 			for _, v := range p4Info.Tables {
 				if strings.HasPrefix(v.Name, preIg) || strings.HasPrefix(v.Name, preEg){
 
-					stream, err := cli.Read(ctx, GenReadRequestWithId(v.ID))
+					stream, err := cli.Read(ctx, GenReadRequestWithId(uint32(v.ID)))
 					if err != nil {
 						log.Fatalf("Got error, %v \n", err.Error())
 						return
@@ -68,6 +68,7 @@ var delFlowCmd = &cobra.Command{
 							if len(rsp.GetEntities()) == 0 {
 								fmt.Printf("%s table is empty\n", v.Name)
 							} else {
+								var cnt = 0
 								for _, e := range rsp.Entities {
 									tbl := e.GetTableEntry()
 									if tbl.GetKey() != nil {
@@ -79,8 +80,11 @@ var delFlowCmd = &cobra.Command{
 											fmt.Println(err)
 											return
 										}
-										fmt.Printf("%s table has cleared.\n", v.Name)
+										cnt++
 									}
+								}
+								if cnt!=0 {
+									fmt.Printf("%d entires of \"%s\" table have cleared\n", cnt, v.Name)
 								}
 							}
 						}
@@ -92,12 +96,12 @@ var delFlowCmd = &cobra.Command{
 		}
 
 		tableId := p4Info.SearchTableId(tableName)
-		if tableId == util.ID_NOT_FOUND {
+		if uint32(tableId) == util.ID_NOT_FOUND {
 			fmt.Printf("Can not find table ID with name: %s\n", tableName)
 			return
 		}
 
-		stream, err := cli.Read(ctx, GenReadRequestWithId(tableId))
+		stream, err := cli.Read(ctx, GenReadRequestWithId(uint32(tableId)))
 		if err != nil {
 			log.Fatalf("Got error, %v \n", err.Error())
 			return
@@ -114,6 +118,7 @@ var delFlowCmd = &cobra.Command{
 					break
 				}
 				if all {
+					var cnt int = 0
 					for _, e := range rsp.Entities {
 						tbl := e.GetTableEntry()
 						if tbl != nil {
@@ -126,6 +131,7 @@ var delFlowCmd = &cobra.Command{
 									fmt.Println(err)
 									return
 								}
+								cnt++
 							} else if tbl.IsDefaultEntry {
 								continue
 							}else {
@@ -137,7 +143,7 @@ var delFlowCmd = &cobra.Command{
 							return
 						}
 					}
-					fmt.Printf("All entries of \"%s\" table are removed.\n", tableName)
+					fmt.Printf("%d entries of \"%s\" table are deleted.\n", cnt, tableName)
 					return
 				} else if len(delEntryNumber) > 0 {
 					for k, e := range rsp.Entities {
@@ -155,7 +161,6 @@ var delFlowCmd = &cobra.Command{
 									}
 									fmt.Printf("Entry number %d is deleted.\nKeyFields: %s\n", k, tbl.Key.Fields)
 								}
-
 							} else {
 								fmt.Printf("Entry number %d not founded", n)
 							}

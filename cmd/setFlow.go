@@ -22,7 +22,6 @@ import (
 	"github.com/P4Networking/proto/go/p4"
 	"github.com/spf13/cobra"
 	"log"
-	"strconv"
 	"strings"
 )
 
@@ -49,7 +48,7 @@ var setFlowCmd = &cobra.Command{
 		ctx := *ctxAddr
 
 		tableId := p4Info.SearchTableId(tableName)
-		if tableId == util.ID_NOT_FOUND {
+		if uint32(tableId) == util.ID_NOT_FOUND{
 			fmt.Printf("Can not found table with name: %s\n", tableName)
 			return
 		}
@@ -70,8 +69,8 @@ var setFlowCmd = &cobra.Command{
 		}
 
 		if len(collectedMatchTypes) != len(matchLists) {
-			fmt.Println("Length of Match keys doesn't matched with Length of args")
-			fmt.Println(collectedMatchTypes, matchLists)
+			fmt.Printf("Length of Match keys [%d] != Length of match args [%d]\n", len(collectedMatchTypes), len(matchLists))
+			fmt.Println("Please check arguments counts of the -m flag")
 			return
 		}
 
@@ -83,52 +82,50 @@ var setFlowCmd = &cobra.Command{
 
 		collectedActionFieldIds:= collectActionFieldIds(table, actionId)
 		if len(collectedActionFieldIds) != len(actionValues) {
-			fmt.Println("Length of action field dosn't matched with Length of action args")
-			fmt.Println(collectedActionFieldIds, actionValues)
+			fmt.Printf("Length of action fields [%d] != Length of action args [%d]\n", len(collectedActionFieldIds), len(actionValues))
+			fmt.Println("Please check arguments counts of the -a flag")
 			return
 		}
-
 		match := util.Match()
 		for k, v := range collectedMatchTypes {
-			MLT := checkMatchListType(matchLists[k-1])
+			 mlt, v1, v2:= checkMatchListType(matchLists[k-1])
 			if v.matchType == enums.MATCH_EXACT {
-				switch MLT {
+				switch mlt {
 				case MAC_TYPE:
-					match = append(match, util.GenKeyField(v.matchType, uint32(k), MacToBytes(matchLists[k-1])))
+					match = append(match, util.GenKeyField(v.matchType, uint32(k), v1.([]byte)))
 				case IP_TYPE:
-					match = append(match, util.GenKeyField(v.matchType, uint32(k), Ipv4ToBytes(matchLists[k-1])))
+					match = append(match, util.GenKeyField(v.matchType, uint32(k), v1.([]byte)))
 				case VALUE_TYPE:
-					arg, _ := strconv.Atoi(matchLists[k-1])
-					match = append(match, util.GenKeyField(v.matchType, uint32(k), ParseBitWidth(arg, v.bitWidth)))
+					match = append(match, util.GenKeyField(v.matchType, uint32(k), setBitValue(v1.(int), v.bitWidth)))
+				case HEX_TYPE:
+					match = append(match, util.GenKeyField(v.matchType, uint32(k), util.HexToBytes(uint16(v1.(uint64)))))
 				default:
 					fmt.Printf("Unexpect value for EXACT_MATCH : %s\n", matchLists[k-1])
 					return
 				}
 			} else if v.matchType == enums.MATCH_LPM {
-				if MLT == CIDR_TYPE {
-					arg := strings.Split(matchLists[k-1], "/")
-					subnet, _ := strconv.Atoi(arg[1])
-					match = append(match, util.GenKeyField(v.matchType, uint32(k), util.Ipv4ToBytes(arg[0]), subnet))
+				if mlt == CIDR_TYPE {
+					match = append(match, util.GenKeyField(v.matchType, uint32(k), v1.([]byte), v2.(int)))
 				} else {
 					fmt.Printf("Unexpect value for LPM_MATCH : %s\n", matchLists[k-1])
 					return
 				}
 			} else if v.matchType == enums.MATCH_TERNARY {
-				if MLT ==  MASK_TYPE {
-					arg := strings.Split(matchLists[k-1], "/")
-					switch checkMaskType(matchLists[k-1]) {
+				//Ternary match only support the complete address format(aa:aa:aa:aa:aa:aa/ff:ff:ff:ff:ff:ff, x.x.x.x/255.255.255.255)
+				if mlt ==  MASK_TYPE {
+					switch v1.(int) {
 					case IP_MASK:
+						arg := v2.([]string)
 						match = append(match, util.GenKeyField(v.matchType, uint32(k), util.Ipv4ToBytes(arg[0]), util.Ipv4ToBytes(arg[1])))
 					case ETH_MASK:
+						arg := v2.([]string)
 						match = append(match, util.GenKeyField(v.matchType, uint32(k), util.MacToBytes(arg[0]), util.MacToBytes(arg[1])))
 					case HEX_MASK:
-						arg[0] = strings.Replace(arg[0], "0x", "", -1)
-						arg[1] = strings.Replace(arg[1], "0x", "", -1)
-						match = append(match, util.GenKeyField(v.matchType, uint32(k), util.HexToBytes(uint16(util.HexToInt(arg[0]))), util.HexToBytes(uint16(util.HexToInt(arg[1])))))
+						arg := v2.([]uint16)
+						match = append(match, util.GenKeyField(v.matchType, uint32(k), util.HexToBytes(arg[0]), util.HexToBytes(arg[1])))
 					case VALUE_MASK:
-						argu1, _ := strconv.Atoi(arg[0])
-						argu2, _ := strconv.Atoi(arg[1])
-						match = append(match, util.GenKeyField(v.matchType, uint32(k), ParseBitWidth(argu1, v.bitWidth), ParseBitWidth(argu2, v.bitWidth)))
+						arg := v2.([]int)
+						match = append(match, util.GenKeyField(v.matchType, uint32(k), setBitValue(arg[0], v.bitWidth), setBitValue(arg[1], v.bitWidth)))
 					}
 				} else {
 					fmt.Printf("Unexpect value for TERNARY_MATCH : %s\n", matchLists[k-1])
@@ -136,6 +133,8 @@ var setFlowCmd = &cobra.Command{
 				}
 			} else if v.matchType == enums.MATCH_RANGE {
 				//TODO: Implement range match
+				fmt.Println("Range_Match Not Supported Yet")
+				return
 			} else {
 				fmt.Println("Unexpected Match Type")
 			}
@@ -144,35 +143,20 @@ var setFlowCmd = &cobra.Command{
 		action := util.Action()
 		if len(collectedActionFieldIds) !=0 {
 			for k, v := range collectedActionFieldIds {
-				switch checkMatchListType(actionValues[k-1]) {
+				switch mlt, v1, _ := checkMatchListType(actionValues[k-1]); mlt {
 				case MAC_TYPE:
-					action = append(action, util.GenDataField(uint32(k), util.MacToBytes(actionValues[k-1])))
+					action = append(action, util.GenDataField(uint32(k), v1.([]byte)))
 				case IP_TYPE:
-					action = append(action, util.GenDataField(uint32(k), Ipv4ToBytes(actionValues[k-1])))
+					action = append(action, util.GenDataField(uint32(k), v1.([]byte)))
 				case VALUE_TYPE:
-					actionValue, _ := strconv.ParseInt(actionValues[k-1], 10, 32)
-					var result []byte
-					switch v {
-					case INT32:
-						result = util.Int32ToBytes(uint32(actionValue))
-					case INT16:
-						result = util.Int16ToBytes(uint16(actionValue))
-					case INT8:
-						result = util.Int8ToBytes(uint8(actionValue))
-					}
-					action = append(action, util.GenDataField(uint32(k), result))
+					action = append(action, util.GenDataField(uint32(k), setBitValue(v1.(int), v)))
+				default:
+					fmt.Println("Unexpected value for action fields")
+					return
 				}
 			}
 		}
-		var req = util.GenWriteRequestWithId(
-					p4.Update_INSERT,
-					tableId,
-					match,
-					&p4.TableData{
-							ActionId: actionId,
-							Fields: action,
-		})
-
+		var req = util.GenWriteRequestWithId(p4.Update_INSERT, tableId, match, &p4.TableData{ ActionId: actionId, Fields: action})
 		if _, err := cli.Write(ctx, req); err != nil {
 			log.Printf("Got error, %v \n", err.Error())
 		}

@@ -29,17 +29,18 @@ const (
 	CIDR_TYPE
 	MASK_TYPE
 	VALUE_TYPE
-	NON_TYPE //5
+	HEX_TYPE
+	NON_TYPE //6
 
-	INT8 //6
+	INT8 //7
 	INT16
 	INT32
-	INT64//9
+	INT64//10
 
-	IP_MASK//10
+	IP_MASK//11
 	ETH_MASK
 	HEX_MASK
-	VALUE_MASK//13
+	VALUE_MASK//14
 )
 
 type MatchSet struct {
@@ -72,7 +73,7 @@ func initConfigClient() (*p4.BfRuntimeClient, *context.Context, *grpc.ClientConn
 
 	rsp, err := cli.GetForwardingPipelineConfig(ctx, &p4.GetForwardingPipelineConfigRequest{DeviceId: uint32(77)})
 	if err != nil {
-		log.Fatalf("Error with", err)
+		log.Fatalf("Error with %v", err)
 	}
 
 	err = gob.NewDecoder(bytes.NewReader(rsp.Config[0].BfruntimeInfo)).Decode(&p4Info)
@@ -101,10 +102,10 @@ func printNameById(id uint32) (string, bool) {
 		return name, FOUND
 	}
 
-	name, ok = p4Info.SearchActionParameterNameById(id)
-	if ok == true {
-		return name, FOUND
-	}
+	//name, ok = p4Info.SearchActionParameterNameById(id)
+	//if ok == true {
+	//	return name, FOUND
+	//}
 
 	return "",NOT_FOUND
 }
@@ -115,7 +116,7 @@ func collectTableMatchTypes(table *util.Table) (map[int]MatchSet, bool) {
 		if v.ID == 65537 || v.Name == "$MATCH_PRIORITY" {
 			continue
 		}
-		bw := checkBitWidth(v.Type.Width)
+		bw := parseBitWidth(v.Type.Width)
 		switch v.MatchType {
 		case "Exact" :
 			m[v.ID] = MatchSet{matchType: enums.MATCH_EXACT, bitWidth: bw}
@@ -137,7 +138,7 @@ func collectActionFieldIds(table *util.Table, id uint32) map[uint32]int {
 	for _, v := range table.ActionSpecs {
 		if v.ID == id {
 			for _, d := range v.Data {
-				result[d.ID] = checkBitWidth(d.Type.Width)
+				result[d.ID] = parseBitWidth(d.Type.Width)
 			}
 			break
 		}
@@ -154,19 +155,25 @@ func IsNumber(s string) bool {
 	return true
 }
 
-func checkMatchListType(value string) uint {
-	if strings.ContainsAny(value, ":") {
-		return MAC_TYPE
-	} else if strings.ContainsAny(value, ".") {
-		return IP_TYPE
-	} else if c, n, _ := net.ParseCIDR(value); (c != nil && n != nil) || strings.Contains(value, "/") {
-		return CIDR_TYPE
-	} else if checkMaskType(value) != -1 {
-		return MASK_TYPE
-	}else if IsNumber(value) {
-		return VALUE_TYPE
+//
+func checkMatchListType(value string) (uint, interface{}, interface{}) {
+	if _, e := net.ParseMAC(value); e == nil {
+		return MAC_TYPE, util.MacToBytes(value), nil
+	} else if e := parseIPv4(value); strings.IndexByte(value, '/') < 0 && e != nil{
+		return IP_TYPE, e, nil
+	} else if i, a, e := ParseCIDR(value); e == 0{
+		return CIDR_TYPE, i, a
+	} else if maskType, arg  := checkMaskType(value); maskType != -1 && arg != nil {
+		return MASK_TYPE, maskType, arg
+	} else if strings.HasPrefix(strings.ToLower(value), "0x") {
+		fmt.Println("hex")
+		hexValue, e := strconv.ParseUint(value, 0, 16)
+		return HEX_TYPE, hexValue, e
+	} else if IsNumber(value) {
+		arg, _ := strconv.Atoi(value)
+		return VALUE_TYPE, arg, nil
 	}
-	return NON_TYPE
+	return NON_TYPE, nil, nil
 }
 /*
 Four case in checkMask
@@ -176,27 +183,35 @@ case 2 : both arguments are hex presentation (for ethertype, etc...)
 case 3 : both arguments are integer
 Caution : out of range of the cases are not handled.
 */
-func checkMaskType(value string) int {
-	if strings.Contains(value, "/") {
-		arg := strings.Split(value, "/")
-		m1, _ := net.ParseMAC(arg[0])
-		m2, _ := net.ParseMAC(arg[1])
-		i1 := net.ParseIP(arg[0])
-		i2 := net.ParseIP(arg[1])
+func checkMaskType(value string) (int, interface{}) {
+	if strings.Count(value, "/") == 1 {
+		var i = strings.IndexByte(value, '/')
+		m1, _ := net.ParseMAC(value[:i])
+		m2, _ := net.ParseMAC(value[i+1:])
+		if m1 != nil && m2 != nil{
+			return ETH_MASK, []string{value[:i], value[i+1:]}
+		}
+		i1 := net.ParseIP(value[:i])
+		i2 := net.ParseIP(value[i+1:])
 		if i1 != nil && i2 != nil{
-			return IP_MASK
-		} else if m1 != nil && m2 != nil{
-			return ETH_MASK
-		} else if strings.Contains(arg[0], "0x") && strings.Contains(arg[1], "0x") {
-			return HEX_MASK
-		} else if IsNumber(arg[0]) && IsNumber(arg[1]) {
-			return VALUE_MASK
+			return IP_MASK, []string{value[:i], value[i+1:]}
+		}
+		if strings.HasPrefix(strings.ToLower(value[:i]), "0x") &&
+			strings.HasPrefix(strings.ToLower(value[i+1:]), "0x"){
+			c1, _ := strconv.ParseUint(value[:i], 0, 16)
+			c2, _ := strconv.ParseUint(value[i+1:], 0, 16)
+			return HEX_MASK, []uint16{uint16(c1), uint16(c2)}
+		}
+		if IsNumber(value[:i]) && IsNumber(value[i+1:]) {
+			a1,_ := strconv.Atoi(value[:i])
+			a2,_ := strconv.Atoi(value[i+1:])
+			return VALUE_MASK, []int{a1, a2}
 		}
 	}
-	return -1
+	return -1, nil
 }
 
-func checkBitWidth(value int) int {
+func parseBitWidth(value int) int {
 	if value > 32 {
 		return INT64
 	} else if (value > 16) && (value <= 32) {
@@ -208,7 +223,7 @@ func checkBitWidth(value int) int {
 	}
 }
 
-func ParseBitWidth(value int, bitWidth int) []byte {
+func setBitValue(value int, bitWidth int) []byte {
 	var result []byte
 	switch bitWidth {
 	case INT32:
@@ -221,40 +236,67 @@ func ParseBitWidth(value int, bitWidth int) []byte {
 	return result
 }
 
-func Ipv4ToBytes(value string) []byte {
-	nameSplit := strings.Split(value, ".")
-	if len(nameSplit) > 4 || len(nameSplit) < 1 {
+//Refactor net package's function
+func ParseCIDR(s string) (interface{}, int, int) {
+	i := strings.IndexByte(s, '/')
+	if i < 0 {
+		return nil, -1, -1
+	}
+	addr, mask := s[:i], s[i+1:]
+	iplen := 4
+	ip := parseIPv4(addr)
+	n, i, ok := dtoi(mask)
+	if ip == nil || !ok || i != len(mask) || n < 0 || n > 8*iplen {
+		return nil, -1, -1
+	}
+	m, _ := strconv.Atoi(mask)
+	return ip, m, 0
+}
+//Refactor net package's function
+func dtoi(s string) (n int, i int, ok bool) {
+	var big = 0xFFFFF
+	n = 0
+	for i = 0; i < len(s) && '0' <= s[i] && s[i] <= '9'; i++ {
+		n = n*10 + int(s[i]-'0')
+		if n >= big {
+			return big, i, false
+		}
+	}
+	if i == 0 {
+		return 0, 0, false
+	}
+	return n, i, true
+}
+//Refactor net package's function
+func parseIPv4(s string) []byte {
+	var size = strings.Count(s, ".")
+	p := make([]byte, size)
+	for i := 0; i < size; i++ {
+		if len(s) == 0 {
+			// Missing octets.
+			return nil
+		}
+		if i > 0 {
+			if s[0] != '.' {
+				return nil
+			}
+			s = s[1:]
+		}
+		n, c, ok := dtoi(s)
+		if !ok || n > 0xFF {
+			return nil
+		}
+		s = s[c:]
+		p[i] = byte(n)
+	}
+	if len(s) != 0 {
 		return nil
 	}
-	result := make([]byte, len(nameSplit))
-	for k, v := range nameSplit {
-		value, err := strconv.Atoi(v)
-		if err != nil {
-			panic(err)
-		}
-		result[k] = byte(value)
-	}
-	return result
-}
-
-func MacToBytes(macAddress string) []byte {
-	macSplit := strings.Split(macAddress, ":")
-	if len(macSplit) > 5 || len(macSplit) < 1 {
-		return nil
-	}
-	result := make([]byte, len(macSplit))
-	for k, v := range macSplit {
-		data, err := strconv.ParseInt(v, 16, 64)
-		if err != nil {
-			panic(err)
-		}
-		result[k] = byte(data)
-	}
-	return result
+	return p
 }
 
 
-func dumpEntries(stream *p4.BfRuntime_ReadClient, table *util.Table) {
+func dumpEntries(stream *p4.BfRuntime_ReadClient, p4table *util.Table) {
 	for {
 		rsp, err := (*stream).Recv()
 		if err == io.EOF {
@@ -263,66 +305,73 @@ func dumpEntries(stream *p4.BfRuntime_ReadClient, table *util.Table) {
 		if err != nil {
 			log.Fatalf("Got error: %v", err)
 		}
-		fmt.Println("--------------------------------------------------------------------------------")
 		Entities := rsp.GetEntities()
 		if len(Entities) == 0 {
-			fmt.Printf("The \"%s\" table is empty\n", table.Name)
-		}
-		for k, v := range Entities {
-			tbl := v.GetTableEntry()
-			if !tbl.IsDefaultEntry {
-				fmt.Printf("Entry %d:\n", k)
-			}
-			fmt.Println("Match Key Info")
-			if tbl.GetKey() != nil {
-				fmt.Printf("  %-20s %-10s %-16s\n", "Field Name:", "Type:", "Value:")
-				for k, f := range tbl.Key.Fields {
-					if f.FieldId == 65537 {
-						continue
-					}
-					switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
-					case "KeyField_Exact_":
-						m := f.GetExact()
-						fmt.Printf("  %-20s %-10s %-16x\n", table.Key[k].Name, "Exact" ,m.Value)
-					case "KeyField_Ternary_":
-						t := f.GetTernary()
-						fmt.Printf("  %-20s %-10s %-16x Mask: %-12x\n", table.Key[k].Name, "Ternay" ,t.Value, t.Mask)
-					case "KeyField_Lpm":
-						l := f.GetLpm()
-						fmt.Printf("  %-20s %-10s %-16x PreFix: %-12d\n", table.Key[k].Name, "LPM" ,l.Value, l.PrefixLen)
-					case "KeyField_Range_":
-						//TODO: Implement range match
-						r := f.GetRange()
-						fmt.Printf("  %-20s %-10s %-16x High: %-6x Low: %-6x\n", table.Key[k].Name, "LPM" ,r.High, r.Low)
+			fmt.Printf("The \"%s\" table is empty\n", p4table.Name)
+		}else {
+			fmt.Println("--------------------------------------------------------------------------------")
+			fmt.Printf("Table Name : %-s\n", p4table.Name)
+			for k, v := range Entities {
+				tbl := v.GetTableEntry()
+				if !tbl.IsDefaultEntry {
+					fmt.Printf("Entry %d:\n", k)
+				}
+				fmt.Println("Match Key Info")
+				if tbl.GetKey() != nil {
+					fmt.Printf("  %-20s %-10s %-16s\n", "Field Name:", "Type:", "Value:")
+					for k, f := range tbl.Key.Fields {
+						if f.FieldId == 65537 {
+							continue
+						}
+						switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
+						case "KeyField_Exact_":
+							m := f.GetExact()
+							fmt.Printf("  %-20s %-10s %-16x\n", p4table.Key[k].Name, "Exact", m.Value)
+						case "KeyField_Ternary_":
+							t := f.GetTernary()
+							fmt.Printf("  %-20s %-10s %-16x Mask: %-12x\n", p4table.Key[k].Name, "Ternay", t.Value, t.Mask)
+						case "KeyField_Lpm":
+							l := f.GetLpm()
+							fmt.Printf("  %-20s %-10s %-16x PreFix: %-12d\n", p4table.Key[k].Name, "LPM", l.Value, l.PrefixLen)
+						case "KeyField_Range_":
+							//TODO: Implement range match
+							r := f.GetRange()
+							//fmt.Printf("  %-20s %-10s %-16x High: %-8x Low: %-8x\n", table.Key[k].Name, "LPM", r.High, r.Low)
+							fmt.Printf("  %-20s %-10s High: %-8x Low: %-8x\n", p4table.Key[k].Name, "LPM", r.High, r.Low)
+						}
 					}
 				}
-			}
 
-			if tbl.IsDefaultEntry {
-				fmt.Printf("Table default action:\n")
-			}
+				if tbl.IsDefaultEntry {
+					fmt.Printf("Table default action:\n")
+				}
+				actionName, _ := printNameById(tbl.Data.ActionId)
+				fmt.Println("Action:", actionName)
 
-			actionName, _ := printNameById(tbl.Data.ActionId)
-			fmt.Println("Action:", actionName)
-
-			if tbl.Data.Fields != nil {
-				fmt.Printf("  %-20s %-16s\n", "Field Name:", "Value:")
-				for _, d := range tbl.Data.Fields {
-					actionFieldName, _ := printNameById(d.FieldId)
-					fmt.Printf("  %-20s %-16x\n",actionFieldName, d.GetStream())
+				if tbl.Data.Fields != nil {
+					fmt.Printf("  %-20s %-16s\n", "Field Name:", "Value:")
+					for _, d := range p4table.ActionSpecs {
+						if d.Name == actionName {
+							for _, data := range tbl.Data.Fields {
+								if d.Data[k].ID == data.FieldId{
+									fmt.Printf("  %-20s %-16x\n", d.Data[k].Name, data.GetStream())
+								}
+							}
+						}
+					}
+				}
+				if k+1 != len(Entities) {
+					fmt.Printf("------------------\n")
 				}
 			}
-			if(k+1!=len(Entities)){
-				fmt.Printf("------------------\n")
-			}
+			fmt.Println("--------------------------------------------------------------------------------")
 		}
-		fmt.Println("--------------------------------------------------------------------------------")
 	}
 }
 
 
 func GenReadRequestWithId(tableId uint32) *p4.ReadRequest {
-	req := &p4.ReadRequest{
+	return &p4.ReadRequest{
 		Entities: []*p4.Entity{
 			{
 				Entity: &p4.Entity_TableEntry{
@@ -333,5 +382,4 @@ func GenReadRequestWithId(tableId uint32) *p4.ReadRequest {
 			},
 		},
 	}
-	return req
 }

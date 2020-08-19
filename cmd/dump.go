@@ -29,7 +29,6 @@ var dumpCmd = &cobra.Command{
 	Use:   "dump TABLE-NAME",
 	Short: "Dump the existed entries in the specific table",
 	Long:  `Display all existed entries in the specific table`,
-	Args:  cobra.MaximumNArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		_, _, conn, cancel, p4Info, _ := initConfigClient()
 		defer conn.Close()
@@ -46,22 +45,24 @@ var dumpCmd = &cobra.Command{
 		cli := *cliAddr
 		ctx := *ctxAddr
 
-		var tableName string
-
 		switch all {
 		case false:
-			tableId := p4Info.SearchTableId(tableName)
-			if tableId == util.ID_NOT_FOUND {
-				fmt.Printf("Can not found table with name: %s\n", tableName)
+			if len(args) <= 0{
+				cmd.Help()
+				return
+			}
+			tableId := p4Info.SearchTableId(args[0])
+			if uint32(tableId) == util.ID_NOT_FOUND {
+				fmt.Printf("Can not found table with name: %s\n", args[0])
 				return
 			}
 			table := p4Info.SearchTableById(tableId)
 			if table == nil {
-				fmt.Printf("Can not found table with ID: %s\n", tableId)
+				fmt.Printf("Can not found table with ID: %d\n", tableId)
 				return
 			}
 
-			stream, err := cli.Read(ctx, GenReadRequestWithId(table.ID))
+			stream, err := cli.Read(ctx, GenReadRequestWithId(uint32(table.ID)))
 			if err != nil {
 				log.Fatalf("Got error, %v \n", err.Error())
 			}
@@ -72,10 +73,10 @@ var dumpCmd = &cobra.Command{
 				if strings.HasPrefix(v.Name, preIg) || strings.HasPrefix(v.Name, preEg) {
 					table := p4Info.SearchTableById(v.ID)
 					if table == nil {
-						fmt.Printf("Can not found table with ID: %s\n", v.ID)
+						fmt.Printf("Can not found table with ID: %v\n", v.ID)
 						return
 					}
-					stream, err := cli.Read(ctx, GenReadRequestWithId(v.ID))
+					stream, err := cli.Read(ctx, GenReadRequestWithId(uint32(v.ID)))
 					if err != nil {
 						log.Fatalf("Got error, %v \n", err.Error())
 					}

@@ -50,7 +50,7 @@ var infoCmd = &cobra.Command{
 			}
 		}
 
-		//TODO: info.go doesn't show nonP4info information.
+		//info.go doesn't show nonP4info information.
 		if !ok {
 			tableList, ok = nonP4Info.GuessTableName(args[0])
 			if !ok {
