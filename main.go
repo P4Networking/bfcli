@@ -15,7 +15,7 @@ limitations under the License.
 */
 package main
 
-import "github.com/P4Networking/bfcli/cmd"
+import "github.com/P4Networking/pisc-cli/cmd"
 
 func main() {
 	cmd.Execute()
