@@ -162,7 +162,7 @@ func dumpEntries(stream *p4.BfRuntime_ReadClient, p4table *util.Table) {
 					fmt.Printf("  %-20s %-16s\n", "Field Name:", "Value:")
 					for _, d := range p4table.ActionSpecs {
 						if d.Name == actionName {
-							for _, data := range tbl.Data.Fields {
+							for k, data := range tbl.Data.Fields {
 								if d.Data[k].ID == data.FieldId{
 									fmt.Printf("  %-20s %-16x\n", d.Data[k].Name, data.GetStream())
 								}
