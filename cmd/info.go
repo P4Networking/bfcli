@@ -1,18 +1,3 @@
-/*
-Copyright © 2020 Chun Ming Ou <breezestars@gmail.com>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package cmd
 
 import (
@@ -36,28 +21,18 @@ var infoCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 
-		_, _, conn, cancel, p4Info, nonP4Info := initConfigClient()
+		_, _, conn, cancel, p4Info, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
 
-		// Guest table name via table name provide form user
-		tableList, ok := p4Info.GuessTableName(args[0])
-		if len(tableList) > 0 {
-			for _, v := range tableList {
-				if args[0] == v {
-					ok = true
-				}
-			}
-		}
-
-		//info.go doesn't show nonP4info information.
+		/* non-p4Info not used yet. If you need to see non-p4 object,
+		please open the issue to talk about this.
+		tableList, ok := nonP4Info.GuessTableName(args[0])
 		if !ok {
-			tableList, ok = nonP4Info.GuessTableName(args[0])
-			if !ok {
-				fmt.Printf("Can not found the table %s\n", args[0])
-				return
-			}
+			fmt.Printf("Can not found the table %s\n", args[0])
+			return
 		}
+		*/
 
 		tableId := p4Info.SearchTableId(args[0])
 		if uint32(tableId) == util.ID_NOT_FOUND {
@@ -66,6 +41,10 @@ var infoCmd = &cobra.Command{
 		}
 
 		table := p4Info.SearchTableById(tableId)
+		if table == nil {
+			fmt.Printf("Can not found table with Id %d\n", tableId)
+			return
+		}
 
 		fmt.Println("--------------------------------------------------------------------------------")
 		fmt.Println("Table Info")

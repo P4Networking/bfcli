@@ -13,41 +13,12 @@ import (
 	"reflect"
 	"strings"
 )
-//MAC_TYPE for Exact match
-//IP_TYPE for Exact match
-//VALUE_TYPE for Exact match
-//CIDR_TYPE for LPM match
-//MASK_TYPE for Ternary match
-//NON_TYPE for unexpect value comes in
-const (
-	MAC_TYPE   = iota //0
-	IP_TYPE
-	CIDR_TYPE
-	MASK_TYPE
-	VALUE_TYPE
-	HEX_TYPE
-	NON_TYPE //6
 
-	INT8 //7
-	INT16
-	INT32
-	INT64//10
-
-	IP_MASK//11
-	ETH_MASK
-	HEX_MASK
-	VALUE_MASK//14
-)
-
-type MatchSet struct {
-	matchType uint
-	bitWidth int
-}
-
+//PISC-CLI use 50000 port basically
 var (
-	FOUND        = true
-	NOT_FOUND    = false
 	DEFAULT_ADDR = ":50000"
+	found     = true
+	not_found = false
 	p4Info       util.BfRtInfoStruct
 	nonP4Info    util.BfRtInfoStruct
 )
@@ -90,23 +61,27 @@ func printNameById(id uint32) (string, bool) {
 
 	name, ok = p4Info.SearchActionNameById(id)
 	if ok == true {
-		return name, FOUND
+		return name, found
 	}
 
 	name, ok = p4Info.SearchDataNameById(id)
 	if ok == true {
-		return name, FOUND
+		return name, found
 	}
 
 	//name, ok = p4Info.SearchActionParameterNameById(id)
 	//if ok == true {
-	//	return name, FOUND
+	//	return name, found
 	//}
 
-	return "",NOT_FOUND
+	return "",not_found
 }
 
-func dumpEntries(stream *p4.BfRuntime_ReadClient, p4table *util.Table) {
+
+// DumpEntries function print entries data of the table.
+// function will terminate when the stream occurs an error.
+// also, it's not show the priority information.
+func DumpEntries(stream *p4.BfRuntime_ReadClient, p4table *util.Table) {
 	for {
 		rsp, err := (*stream).Recv()
 		if err == io.EOF {
@@ -145,9 +120,8 @@ func dumpEntries(stream *p4.BfRuntime_ReadClient, p4table *util.Table) {
 							fmt.Printf("  %-20s %-10s %-16x PreFix: %-12d\n", p4table.Key[k].Name, "LPM", l.Value, l.PrefixLen)
 						case "KeyField_Range_":
 							//TODO: Implement range match
-							r := f.GetRange()
-							//fmt.Printf("  %-20s %-10s %-16x High: %-8x Low: %-8x\n", table.Key[k].Name, "LPM", r.High, r.Low)
-							fmt.Printf("  %-20s %-10s High: %-8x Low: %-8x\n", p4table.Key[k].Name, "LPM", r.High, r.Low)
+							//r := f.GetRange()
+							//fmt.Printf("  %-20s %-10s High: %-8x Low: %-8x\n", p4table.Key[k].Name, "LPM", r.High, r.Low)
 						}
 					}
 				}
@@ -179,7 +153,8 @@ func dumpEntries(stream *p4.BfRuntime_ReadClient, p4table *util.Table) {
 	}
 }
 
-func GenReadRequestWithId(tableId uint32) *p4.ReadRequest {
+// genReadRequestWithId function generates the read request format to read entries of the table via table ID.
+func genReadRequestWithId(tableId uint32) *p4.ReadRequest {
 	return &p4.ReadRequest{
 		Entities: []*p4.Entity{
 			{
