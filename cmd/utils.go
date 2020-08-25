@@ -69,11 +69,6 @@ func printNameById(id uint32) (string, bool) {
 		return name, found
 	}
 
-	//name, ok = p4Info.SearchActionParameterNameById(id)
-	//if ok == true {
-	//	return name, found
-	//}
-
 	return "",not_found
 }
 

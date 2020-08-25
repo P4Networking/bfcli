@@ -70,7 +70,7 @@ pisc-cli del-flow [TABLE_NAME] [Flag] [Arguments]
     ```
 2. all : delete all entries of the table
     ```
-    //Do not confuse with set-flow's "-a" flag. It's totally diffrent.
+    // Do not confuse with set-flow's "-a" flag. It's totally diffrent.
     pisc-cli del-flow [TABLE_NAME] -a
     pisc-cli del-flow pipe.SwitchIngress.fib -a
     ```
