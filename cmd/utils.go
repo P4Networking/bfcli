@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
-	"errors"
 	"fmt"
+	"github.com/P4Networking/pisc/southbound/bfrt"
 	"github.com/P4Networking/pisc/util"
 	"github.com/P4Networking/pisc/util/enums"
 	"github.com/P4Networking/pisc/util/enums/id"
@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 	"io"
 	"log"
+	"math"
 	"net"
 	"reflect"
 	"strconv"
@@ -51,17 +52,22 @@ type MatchSet struct {
 	matchType  uint
 	bitWidth   int
 }
+type ActionSet struct {
+	actionValue    string
+	bitWidth       int
+	parsedBitWidth int
+}
 
 //PISC-CLI use 50000 port basically
 var (
 	DEFAULT_ADDR = ":50000"
-	found     = true
-	not_found = false
-	p4Info       util.BfRtInfoStruct
-	nonP4Info    util.BfRtInfoStruct
+	found        = true
+	not_found    = false
+	p4Info       bfrt.BfRtInfo
+	nonP4Info    bfrt.BfRtInfo
 )
 
-func initConfigClient() (*p4.BfRuntimeClient, *context.Context, *grpc.ClientConn, context.CancelFunc, *util.BfRtInfoStruct, *util.BfRtInfoStruct) {
+func initConfigClient() (*p4.BfRuntimeClient, *context.Context, *grpc.ClientConn, context.CancelFunc, *bfrt.BfRtInfo, *bfrt.BfRtInfo) {
 	if server == "" {
 		server = DEFAULT_ADDR
 	}
@@ -93,58 +99,57 @@ func initConfigClient() (*p4.BfRuntimeClient, *context.Context, *grpc.ClientConn
 	return &cli, &ctx, conn, cancel, &p4Info, &nonP4Info
 }
 
-func printNameById(id uint32) (string, bool) {
+func printNameById(actionName string, id uint32) (string, bool) {
 	var name string
 	var ok bool
 
-	name, ok = p4Info.SearchActionNameById(id)
+	name, ok = p4Info.GetActionNameById(id)
 	if ok == true {
 		return name, found
 	}
 
-	name, ok = p4Info.SearchDataNameById(id)
+	name, ok = p4Info.GetDataNameById(id)
 	if ok == true {
 		return name, found
 	}
 
-	name, ok = p4Info.SearchActionParameterNameById(id)
+	name, ok = p4Info.GetActionParameterNameById(actionName, id)
 	if ok == true {
 		return name, found
 	}
 
-	name, ok = p4Info.SearchDataNameById(id)
+	name, ok = p4Info.GetDataNameById(id)
 	if ok == true {
 		return name, found
 	}
 
-	return "",not_found
+	return "", not_found
 }
 
 // collectTableMatchTypes function collects the match key's type and bit width.
 // the collected type and bit width determine what kind of the input should be used.
-func collectTableMatchTypes(table *util.Table) (map[int]MatchSet, bool) {
-	if len(table.Key) != len(matchLists) {
+func collectTableMatchTypes(table *bfrt.Table, matchKey *[]string) (map[uint32]MatchSet, bool) {
+	if len(table.Key) != len(*matchKey) {
 		fmt.Printf("Length of Match keys [%d] != Length of match args [%d]\n", len(table.Key), len(matchLists))
-		fmt.Println("Check match arguments")
 		return nil, not_found
 	}
 
-	m := make(map[int]MatchSet)
+	m := make(map[uint32]MatchSet)
 	for kv, v := range table.Key {
 		bw := parseBitWidth(v.Type.Width)
 		switch v.MatchType {
 		case "Exact":
 			if v.ID == 65537 || v.Name == "$MATCH_PRIORITY" {
-				m[v.ID] = MatchSet{matchValue: matchLists[kv], matchType: enums.MATCH_EXACT, bitWidth: INT32}
+				m[v.ID] = MatchSet{matchValue: (*matchKey)[kv], matchType: enums.MATCH_EXACT, bitWidth: INT32}
 			} else {
-				m[v.ID] = MatchSet{matchValue: matchLists[kv], matchType: enums.MATCH_EXACT, bitWidth: bw}
+				m[v.ID] = MatchSet{matchValue: (*matchKey)[kv], matchType: enums.MATCH_EXACT, bitWidth: bw}
 			}
 		case "LPM":
-			m[v.ID] = MatchSet{matchValue: matchLists[kv], matchType: enums.MATCH_LPM, bitWidth: bw}
+			m[v.ID] = MatchSet{matchValue: (*matchKey)[kv], matchType: enums.MATCH_LPM, bitWidth: bw}
 		case "Range":
-			m[v.ID] = MatchSet{matchValue: matchLists[kv], matchType: enums.MATCH_RANGE, bitWidth: bw}
+			m[v.ID] = MatchSet{matchValue: (*matchKey)[kv], matchType: enums.MATCH_RANGE, bitWidth: bw}
 		case "Ternary":
-			m[v.ID] = MatchSet{matchValue: matchLists[kv],matchType: enums.MATCH_TERNARY, bitWidth: bw}
+			m[v.ID] = MatchSet{matchValue: (*matchKey)[kv], matchType: enums.MATCH_TERNARY, bitWidth: bw}
 		default:
 			return nil, not_found
 		}
@@ -154,17 +159,24 @@ func collectTableMatchTypes(table *util.Table) (map[int]MatchSet, bool) {
 
 // collectActionFieldIds function collects the bit width of action data.
 // the collected bit widths decide what kind of input should be used.
-func collectActionFieldIds(table *util.Table, id uint32) map[uint32]int {
-	result := make(map[uint32]int)
+func collectActionFieldIds(table *bfrt.Table, id uint32, values []string) (map[uint32]ActionSet, error) {
+	result := make(map[uint32]ActionSet)
 	for _, v := range table.ActionSpecs {
 		if v.ID == id {
-			for _, d := range v.Data {
-				result[d.ID] = parseBitWidth(d.Type.Width)
+			for kd, d := range v.Data {
+				if IsNumber(values[kd]) {
+					value, err := strconv.Atoi(values[kd])
+					if int(math.Pow(2, float64(d.Type.Width))-1) < value {
+						err = fmt.Errorf("inputted action value is overflow: %s\n", values[kd])
+						return nil, err
+					}
+				}
+				result[d.ID] = ActionSet{actionValue: values[kd], bitWidth: d.Type.Width, parsedBitWidth: parseBitWidth(d.Type.Width)}
 			}
 			break
 		}
 	}
-	return result
+	return result, nil
 }
 
 // IsNumber function check that the string is numeric.
@@ -338,10 +350,9 @@ ERROR:
 	return nil
 }
 
-
 // DumpEntries function reads entries from read request response, and the function print all of the entries.
 // The function will terminate when the stream occurs an error and the response entities count has zeros.
-func DumpEntries(stream *p4.BfRuntime_ReadClient, p4table *util.Table) {
+func DumpEntries(stream *p4.BfRuntime_ReadClient, p4table *bfrt.Table) {
 	for {
 		rsp, err := (*stream).Recv()
 		if err == io.EOF {
@@ -386,12 +397,12 @@ func DumpEntries(stream *p4.BfRuntime_ReadClient, p4table *util.Table) {
 				if tbl.IsDefaultEntry {
 					fmt.Printf("Table default action:\n")
 				}
-				actionName, _ := printNameById(tbl.Data.ActionId)
+				actionName, _ := p4Info.GetActionNameById(tbl.Data.ActionId)
 				fmt.Println("Action:", actionName)
 				if tbl.Data.Fields != nil {
 					fmt.Printf("  %-20s %-16s\n", "Field Name:", "Value:")
 					for _, datafield := range tbl.Data.Fields {
-						an, err := printNameById(datafield.FieldId)
+						an, err := printNameById(actionName, datafield.FieldId)
 						if err {
 							fmt.Printf("  %-20s %-16x\n", an, datafield.GetStream())
 						}
@@ -408,14 +419,16 @@ func DumpEntries(stream *p4.BfRuntime_ReadClient, p4table *util.Table) {
 
 // genReadRequestWithId function generates the read request to read table's entries.
 func genReadRequestWithId(tableId uint32) *p4.ReadRequest {
-	return &p4.ReadRequest{
-		Entities: []*p4.Entity{
-			{
-				Entity: &p4.Entity_TableEntry{
-					TableEntry: &p4.TableEntry{
-						TableId: tableId,
-					},
-				},
+	var req = &p4.ReadRequest{}
+	req.Entities = append(req.Entities, genEntity(tableId))
+	return req
+}
+
+func genEntity(tableId uint32) *p4.Entity {
+	return &p4.Entity{
+		Entity: &p4.Entity_TableEntry{
+			TableEntry: &p4.TableEntry{
+				TableId: tableId,
 			},
 		},
 	}
@@ -427,27 +440,82 @@ func genReadRequestWithId(tableId uint32) *p4.ReadRequest {
 // In second case, DeleteEntries function will delete all entries in the response.
 // DeleteEntries will terminate when the target number is out of range of response's entities number,
 // and also function will terminate when the write request occurs an error.
-func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.Context, target int) ([]int, error) {
+func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.Context) ([]int, error) {
 	var result []int
-	if target > len((*rsp).Entities) {
-		return nil, errors.New("target number is out of range")
-	}
+	var delReq *p4.WriteRequest = nil
 	for k, e := range (*rsp).Entities {
 		tbl := e.GetTableEntry()
 		if tbl.IsDefaultEntry {
 			continue
 		}
-		if (tbl.GetKey() != nil && k == target) || target < 0 {
-			delReq := util.GenWriteRequestWithId(p4.Update_DELETE, id.TableId(tbl.TableId), tbl.Key.Fields, nil)
-			delReq.Updates[0].GetEntity().GetTableEntry().Data = nil
-			_, err := (*cli).Write(*ctx, delReq)
-			if err != nil {
-				return []int{k}, err
-			}
-			result = append(result, k)
+		if delReq == nil {
+			delReq = util.GenWriteRequestWithId(p4.Update_DELETE, id.TableId(tbl.TableId), tbl.Key.Fields, nil)
 		} else {
-			fmt.Printf("Entry %d doesn't exist in table\n", target)
+			delReq.Updates = append(delReq.Updates, util.GenUpdateWithId(p4.Update_DELETE, id.TableId(tbl.TableId), tbl.Key.Fields, nil))
 		}
+		result = append(result, k)
+	}
+	_, err := (*cli).Write(*ctx, delReq)
+	if err != nil {
+		return result, err
 	}
 	return result, nil
+}
+
+func BuildMatchKeys(collectedMatchTypes *map[uint32]MatchSet) []*p4.KeyField {
+	match := util.Match()
+	for k, v := range *collectedMatchTypes {
+		mlt, v1, v2 := checkMatchListType(v.matchValue)
+		// In EXACT case, v2 value is always nil.
+		if v.matchType == enums.MATCH_EXACT {
+			switch mlt {
+			case MAC_TYPE:
+				match = append(match, util.GenKeyField(v.matchType, k, v1.([]byte)))
+			case IP_TYPE:
+				match = append(match, util.GenKeyField(v.matchType, k, v1.([]byte)))
+			case VALUE_TYPE:
+				match = append(match, util.GenKeyField(v.matchType, k, setBitValue(v1.(int), v.bitWidth)))
+			case HEX_TYPE:
+				match = append(match, util.GenKeyField(v.matchType, k, util.HexToBytes(uint16(v1.(uint64)))))
+			default:
+				fmt.Printf("Unexpect value for EXACT_MATCH : %s\n", v.matchValue)
+				return nil
+			}
+		} else if v.matchType == enums.MATCH_LPM {
+			if mlt == CIDR_TYPE {
+				match = append(match, util.GenKeyField(v.matchType, k, v1.([]byte), v2.(int)))
+			} else {
+				fmt.Printf("Unexpect value for LPM_MATCH : %s\n", v.matchValue)
+				return nil
+			}
+		} else if v.matchType == enums.MATCH_TERNARY {
+			//Ternary match only support the complete address format(aa:aa:aa:aa:aa:aa/ff:ff:ff:ff:ff:ff, x.x.x.x/255.255.255.255)
+			if mlt == MASK_TYPE {
+				switch v1.(int) {
+				case IP_MASK:
+					arg := v2.([]string)
+					match = append(match, util.GenKeyField(v.matchType, k, util.Ipv4ToBytes(arg[0]), util.Ipv4ToBytes(arg[1])))
+				case ETH_MASK:
+					arg := v2.([]string)
+					match = append(match, util.GenKeyField(v.matchType, k, util.MacToBytes(arg[0]), util.MacToBytes(arg[1])))
+				case HEX_MASK:
+					arg := v2.([]uint16)
+					match = append(match, util.GenKeyField(v.matchType, k, util.HexToBytes(arg[0]), util.HexToBytes(arg[1])))
+				case VALUE_MASK:
+					arg := v2.([]int)
+					match = append(match, util.GenKeyField(v.matchType, k, setBitValue(arg[0], v.bitWidth), setBitValue(arg[1], v.bitWidth)))
+				}
+			} else {
+				fmt.Printf("Unexpect value for TERNARY_MATCH : %s\n", v.matchValue)
+				return nil
+			}
+		} else if v.matchType == enums.MATCH_RANGE {
+			//TODO: Implement range match
+			fmt.Println("Range_Match Not Supported Yet")
+			return nil
+		} else {
+			fmt.Println("Unexpected Match Type")
+		}
+	}
+	return match
 }

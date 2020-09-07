@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/P4Networking/pisc/util"
+	"github.com/P4Networking/pisc/southbound/bfrt"
 	"github.com/spf13/cobra"
 )
 
@@ -34,13 +34,13 @@ var infoCmd = &cobra.Command{
 		}
 		*/
 
-		tableId := p4Info.SearchTableId(args[0])
-		if uint32(tableId) == util.ID_NOT_FOUND {
+		tableId, _ := p4Info.GetTableId(args[0])
+		if uint32(tableId) == bfrt.ID_NOT_FOUND {
 			fmt.Printf("Can not found table with name: %s\n", args[0])
 			return
 		}
 
-		table := p4Info.SearchTableById(tableId)
+		table, _ := p4Info.GetTableById(tableId)
 		if table == nil {
 			fmt.Printf("Can not found table with Id %d\n", tableId)
 			return

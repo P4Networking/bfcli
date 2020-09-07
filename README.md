@@ -74,21 +74,12 @@ pisc-cli del-flow [TABLE_NAME] [Flag] [Arguments]
     pisc-cli del-flow [TABLE_NAME] -a
     pisc-cli del-flow pipe.SwitchIngress.fib -a
     ```
-3. entry : delete specific entry/entries number
+3. match : delete specific entry by match key.
+    the match flag acts like set-flow function.
+    the match flag need to specify talbe's match keys to delete entry.
     ```
-    pisc-cli del-flow [TABLE_NAME] -e "entry_number, ..."
-   ```
-   ```
-    // Assume that we have four entries{0, 1, ,2 ,3} in rib table.
-    // Also, we can use "info" command to see the entry number.
-    // About deleting entry, we don't need to care about the order of entry number.
-    
-    pisc-cli del-flow pipe.SwitchIngress.rib -e "1, 0, 2"
-    
-    // After deleting, the entry number will change to another.
-    // Please check the entry number everytime after deleting.
-    
-    pisc-cli del-flow pipe.SwitchIngress.rib -e "3" - error
+    pisc-cli del-flow [TABLE_NAME] -m "Match key, ..."
+    pisc-cli del-flow pipe.SwitchIngress.rib -m "192.168.1.7/255.255.255.255, 4000"
     ```
 
 ## How to show the table and entries information?
@@ -101,7 +92,7 @@ pisc-cli table
 ```
 2. dump :  dump all entries of the table, also -a flag will dump all tables.
 ```
-pisc-cli dump
+pisc-cli dump [TABLE_NAME]
 pisc-cli dump -a
 ```
 3. info : show table information to the user

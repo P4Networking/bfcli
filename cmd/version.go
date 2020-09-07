@@ -22,7 +22,7 @@ var versionCmd = &cobra.Command{
 			callLogo()
 			fmt.Println(piscLogo)
 		}
-		fmt.Println("Version Called")
+		fmt.Println("Version : 0.1.0")
 	},
 }
 
