@@ -48,11 +48,13 @@ const (
 )
 
 type MatchSet struct {
+	fieldId    uint32
 	matchValue string
 	matchType  uint
 	bitWidth   int
 }
 type ActionSet struct {
+	fieldId uint32
 	actionValue    string
 	bitWidth       int
 	parsedBitWidth int
@@ -128,28 +130,28 @@ func printNameById(actionName string, id uint32) (string, bool) {
 
 // collectTableMatchTypes function collects the match key's type and bit width.
 // the collected type and bit width determine what kind of the input should be used.
-func collectTableMatchTypes(table *bfrt.Table, matchKey *[]string) (map[uint32]MatchSet, bool) {
+func collectTableMatchTypes(table *bfrt.Table, matchKey *[]string) ([]MatchSet, bool) {
 	if len(table.Key) != len(*matchKey) {
 		fmt.Printf("Length of Match keys [%d] != Length of match args [%d]\n", len(table.Key), len(matchLists))
 		return nil, not_found
 	}
 
-	m := make(map[uint32]MatchSet)
+	var m []MatchSet
 	for kv, v := range table.Key {
 		bw := parseBitWidth(v.Type.Width)
 		switch v.MatchType {
 		case "Exact":
 			if v.ID == 65537 || v.Name == "$MATCH_PRIORITY" {
-				m[v.ID] = MatchSet{matchValue: (*matchKey)[kv], matchType: enums.MATCH_EXACT, bitWidth: INT32}
+			m = append(m, MatchSet{fieldId: v.ID, matchValue: (*matchKey)[kv], matchType: enums.MATCH_EXACT, bitWidth: INT32})
 			} else {
-				m[v.ID] = MatchSet{matchValue: (*matchKey)[kv], matchType: enums.MATCH_EXACT, bitWidth: bw}
+				m = append(m, MatchSet{fieldId: v.ID, matchValue: (*matchKey)[kv], matchType: enums.MATCH_EXACT, bitWidth: bw})
 			}
 		case "LPM":
-			m[v.ID] = MatchSet{matchValue: (*matchKey)[kv], matchType: enums.MATCH_LPM, bitWidth: bw}
+			m = append(m, MatchSet{fieldId: v.ID, matchValue: (*matchKey)[kv], matchType: enums.MATCH_LPM, bitWidth: bw})
 		case "Range":
-			m[v.ID] = MatchSet{matchValue: (*matchKey)[kv], matchType: enums.MATCH_RANGE, bitWidth: bw}
+			m = append(m, MatchSet{fieldId: v.ID, matchValue: (*matchKey)[kv], matchType: enums.MATCH_RANGE, bitWidth: bw})
 		case "Ternary":
-			m[v.ID] = MatchSet{matchValue: (*matchKey)[kv], matchType: enums.MATCH_TERNARY, bitWidth: bw}
+			m = append(m, MatchSet{fieldId: v.ID, matchValue: (*matchKey)[kv], matchType: enums.MATCH_TERNARY, bitWidth: bw})
 		default:
 			return nil, not_found
 		}
@@ -159,8 +161,8 @@ func collectTableMatchTypes(table *bfrt.Table, matchKey *[]string) (map[uint32]M
 
 // collectActionFieldIds function collects the bit width of action data.
 // the collected bit widths decide what kind of input should be used.
-func collectActionFieldIds(table *bfrt.Table, id uint32, values []string) (map[uint32]ActionSet, error) {
-	result := make(map[uint32]ActionSet)
+func collectActionFieldIds(table *bfrt.Table, id uint32, values []string) ([]ActionSet, error) {
+	var result []ActionSet
 	for _, v := range table.ActionSpecs {
 		if v.ID == id {
 			for kd, d := range v.Data {
@@ -171,7 +173,7 @@ func collectActionFieldIds(table *bfrt.Table, id uint32, values []string) (map[u
 						return nil, err
 					}
 				}
-				result[d.ID] = ActionSet{actionValue: values[kd], bitWidth: d.Type.Width, parsedBitWidth: parseBitWidth(d.Type.Width)}
+				result = append(result, ActionSet{fieldId: d.ID ,actionValue: values[kd], bitWidth: d.Type.Width, parsedBitWidth: parseBitWidth(d.Type.Width)})
 			}
 			break
 		}
@@ -462,28 +464,28 @@ func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.
 	return result, nil
 }
 
-func BuildMatchKeys(collectedMatchTypes *map[uint32]MatchSet) []*p4.KeyField {
+func BuildMatchKeys(collectedMatchTypes *[]MatchSet) []*p4.KeyField {
 	match := util.Match()
-	for k, v := range *collectedMatchTypes {
+	for _, v := range *collectedMatchTypes {
 		mlt, v1, v2 := checkMatchListType(v.matchValue)
 		// In EXACT case, v2 value is always nil.
 		if v.matchType == enums.MATCH_EXACT {
 			switch mlt {
 			case MAC_TYPE:
-				match = append(match, util.GenKeyField(v.matchType, k, v1.([]byte)))
+				match = append(match, util.GenKeyField(v.matchType, v.fieldId, v1.([]byte)))
 			case IP_TYPE:
-				match = append(match, util.GenKeyField(v.matchType, k, v1.([]byte)))
+				match = append(match, util.GenKeyField(v.matchType, v.fieldId, v1.([]byte)))
 			case VALUE_TYPE:
-				match = append(match, util.GenKeyField(v.matchType, k, setBitValue(v1.(int), v.bitWidth)))
+				match = append(match, util.GenKeyField(v.matchType, v.fieldId, setBitValue(v1.(int), v.bitWidth)))
 			case HEX_TYPE:
-				match = append(match, util.GenKeyField(v.matchType, k, util.HexToBytes(uint16(v1.(uint64)))))
+				match = append(match, util.GenKeyField(v.matchType, v.fieldId, util.HexToBytes(uint16(v1.(uint64)))))
 			default:
 				fmt.Printf("Unexpect value for EXACT_MATCH : %s\n", v.matchValue)
 				return nil
 			}
 		} else if v.matchType == enums.MATCH_LPM {
 			if mlt == CIDR_TYPE {
-				match = append(match, util.GenKeyField(v.matchType, k, v1.([]byte), v2.(int)))
+				match = append(match, util.GenKeyField(v.matchType, v.fieldId, v1.([]byte), v2.(int)))
 			} else {
 				fmt.Printf("Unexpect value for LPM_MATCH : %s\n", v.matchValue)
 				return nil
@@ -494,16 +496,16 @@ func BuildMatchKeys(collectedMatchTypes *map[uint32]MatchSet) []*p4.KeyField {
 				switch v1.(int) {
 				case IP_MASK:
 					arg := v2.([]string)
-					match = append(match, util.GenKeyField(v.matchType, k, util.Ipv4ToBytes(arg[0]), util.Ipv4ToBytes(arg[1])))
+					match = append(match, util.GenKeyField(v.matchType, v.fieldId, util.Ipv4ToBytes(arg[0]), util.Ipv4ToBytes(arg[1])))
 				case ETH_MASK:
 					arg := v2.([]string)
-					match = append(match, util.GenKeyField(v.matchType, k, util.MacToBytes(arg[0]), util.MacToBytes(arg[1])))
+					match = append(match, util.GenKeyField(v.matchType, v.fieldId, util.MacToBytes(arg[0]), util.MacToBytes(arg[1])))
 				case HEX_MASK:
 					arg := v2.([]uint16)
-					match = append(match, util.GenKeyField(v.matchType, k, util.HexToBytes(arg[0]), util.HexToBytes(arg[1])))
+					match = append(match, util.GenKeyField(v.matchType, v.fieldId, util.HexToBytes(arg[0]), util.HexToBytes(arg[1])))
 				case VALUE_MASK:
 					arg := v2.([]int)
-					match = append(match, util.GenKeyField(v.matchType, k, setBitValue(arg[0], v.bitWidth), setBitValue(arg[1], v.bitWidth)))
+					match = append(match, util.GenKeyField(v.matchType, v.fieldId, setBitValue(arg[0], v.bitWidth), setBitValue(arg[1], v.bitWidth)))
 				}
 			} else {
 				fmt.Printf("Unexpect value for TERNARY_MATCH : %s\n", v.matchValue)

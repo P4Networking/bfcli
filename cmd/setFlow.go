@@ -7,7 +7,6 @@ import (
 	"github.com/P4Networking/proto/go/p4"
 	"github.com/spf13/cobra"
 	"log"
-	"sort"
 	"strings"
 )
 
@@ -80,21 +79,18 @@ var setFlowCmd = &cobra.Command{
 
 		fmt.Printf("Make Match Data...")
 		match := BuildMatchKeys(&collectedMatchTypes)
-		sort.Slice(match, func(i, j int) bool {
-			return match[i].FieldId < match[j].FieldId
-		})
 
 		fmt.Printf("   Make Action Data...")
 		action := util.Action()
 		if len(collectedActionFieldIds) != 0 {
-			for k, v := range collectedActionFieldIds {
+			for _, v := range collectedActionFieldIds {
 				switch mlt, v1, _ := checkMatchListType(v.actionValue); mlt {
 				case MAC_TYPE:
-					action = append(action, util.GenDataField(k, v1.([]byte)))
+					action = append(action, util.GenDataField(v.fieldId, v1.([]byte)))
 				case IP_TYPE:
-					action = append(action, util.GenDataField(k, v1.([]byte)))
+					action = append(action, util.GenDataField(v.fieldId, v1.([]byte)))
 				case VALUE_TYPE:
-					action = append(action, util.GenDataField(k, setBitValue(v1.(int), v.parsedBitWidth)))
+					action = append(action, util.GenDataField(v.fieldId, setBitValue(v1.(int), v.parsedBitWidth)))
 				default:
 					fmt.Println("Unexpected value for action fields")
 					return
