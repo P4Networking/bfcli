@@ -54,17 +54,15 @@ type MatchSet struct {
 	bitWidth   int
 }
 type ActionSet struct {
-	fieldId uint32
+	fieldId        uint32
 	actionValue    string
 	bitWidth       int
 	parsedBitWidth int
 }
 
-//PISC-CLI use 50000 port basically
 var (
 	DEFAULT_ADDR = ":50000"
-	found        = true
-	not_found    = false
+
 	p4Info       bfrt.BfRtInfo
 	nonP4Info    bfrt.BfRtInfo
 )
@@ -105,25 +103,25 @@ func printNameById(actionName string, id uint32) (string, bool) {
 
 	name, ok = p4Info.GetActionNameById(id)
 	if ok == true {
-		return name, found
+		return name, true
 	}
 
 	name, ok = p4Info.GetDataNameById(id)
 	if ok == true {
-		return name, found
+		return name, true
 	}
 
 	name, ok = p4Info.GetActionParameterNameById(actionName, id)
 	if ok == true {
-		return name, found
+		return name, true
 	}
 
 	name, ok = p4Info.GetDataNameById(id)
 	if ok == true {
-		return name, found
+		return name, true
 	}
 
-	return "", not_found
+	return "", false
 }
 
 // collectTableMatchTypes function collects the match key's type and bit width.
@@ -131,7 +129,7 @@ func printNameById(actionName string, id uint32) (string, bool) {
 func collectTableMatchTypes(table *bfrt.Table, matchKey *[]string) ([]MatchSet, bool) {
 	if len(table.Key) != len(*matchKey) {
 		fmt.Printf("Length of Match keys [%d] != Length of match args [%d]\n", len(table.Key), len(matchLists))
-		return nil, not_found
+		return nil, false
 	}
 
 	var m []MatchSet
@@ -140,7 +138,7 @@ func collectTableMatchTypes(table *bfrt.Table, matchKey *[]string) ([]MatchSet, 
 		switch v.MatchType {
 		case "Exact":
 			if v.ID == 65537 || v.Name == "$MATCH_PRIORITY" {
-			m = append(m, MatchSet{fieldId: v.ID, matchValue: (*matchKey)[kv], matchType: enums.MATCH_EXACT, bitWidth: INT32})
+				m = append(m, MatchSet{fieldId: v.ID, matchValue: (*matchKey)[kv], matchType: enums.MATCH_EXACT, bitWidth: INT32})
 			} else {
 				m = append(m, MatchSet{fieldId: v.ID, matchValue: (*matchKey)[kv], matchType: enums.MATCH_EXACT, bitWidth: bw})
 			}
@@ -151,10 +149,10 @@ func collectTableMatchTypes(table *bfrt.Table, matchKey *[]string) ([]MatchSet, 
 		case "Ternary":
 			m = append(m, MatchSet{fieldId: v.ID, matchValue: (*matchKey)[kv], matchType: enums.MATCH_TERNARY, bitWidth: bw})
 		default:
-			return nil, not_found
+			return nil, false
 		}
 	}
-	return m, found
+	return m, true
 }
 
 // collectActionFieldIds function collects the bit width of action data.
@@ -171,7 +169,7 @@ func collectActionFieldIds(table *bfrt.Table, id uint32, values []string) ([]Act
 						return nil, err
 					}
 				}
-				result = append(result, ActionSet{fieldId: d.ID ,actionValue: values[kd], bitWidth: d.Type.Width, parsedBitWidth: parseBitWidth(d.Type.Width)})
+				result = append(result, ActionSet{fieldId: d.ID, actionValue: values[kd], bitWidth: d.Type.Width, parsedBitWidth: parseBitWidth(d.Type.Width)})
 			}
 			break
 		}
@@ -250,16 +248,17 @@ func checkMaskType(value string) (int, interface{}) {
 
 // parseBitWidth function determines that the input value is what kind of sizes.
 func parseBitWidth(value int) int {
-	if value > 32 {
+	if (value > 32) && (value <= 64) {
 		return INT64
 	} else if (value > 16) && (value <= 32) {
 		return INT32
 	} else if (value > 8) && (value <= 16) {
 		return INT16
-	} else {
+	} else if (value > 0) && (value <= 8) {
 		return INT8
+	} else {
+		return -1
 	}
-	return -1
 }
 
 // setBitValue function based on the input bit width to decide what size of the function should be used.
@@ -350,7 +349,7 @@ ERROR:
 	return nil
 }
 
-// DumpEntries function reads entries from read request response, and the function print all of the entries.
+// DumpEntries function reads entries from ReadRequest response, and the function print all of the entries.
 // The function will terminate when the stream occurs an error and the response entities count has zeros.
 func DumpEntries(stream *p4.BfRuntime_ReadClient, p4table *bfrt.Table) {
 	for {
@@ -434,12 +433,7 @@ func genEntity(tableId uint32) *p4.Entity {
 	}
 }
 
-// DeleteEntries function read entries from the response to delete the target entry number.
-// The target number have two options, first is the number over the zero, second is the number under the zero.
-// In first case, DeleteEntries function will find out the matched target number and delete it.
-// In second case, DeleteEntries function will delete all entries in the response.
-// DeleteEntries will terminate when the target number is out of range of response's entities number,
-// and also function will terminate when the write request occurs an error.
+// DeleteEntries function read entries from the response to delete all entries of a table
 func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.Context) ([]int, error) {
 	var result []int
 	var delReq *p4.WriteRequest = nil
@@ -462,6 +456,7 @@ func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.
 	return result, nil
 }
 
+// BuildMatchKeys function using the input arguments make the KeyField what a table need to match.
 func BuildMatchKeys(collectedMatchTypes *[]MatchSet) []*p4.KeyField {
 	match := util.Match()
 	for _, v := range *collectedMatchTypes {
