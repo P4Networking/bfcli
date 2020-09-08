@@ -81,10 +81,8 @@ func initConfigClient() (*p4.BfRuntimeClient, *context.Context, *grpc.ClientConn
 	cli := p4.NewBfRuntimeClient(conn)
 
 	// Contact the server and print out its response.
-
 	ctx, cancel := context.WithCancel(context.Background())
-
-	rsp, err := cli.GetForwardingPipelineConfig(ctx, &p4.GetForwardingPipelineConfigRequest{DeviceId: uint32(77)})
+	rsp, err := cli.GetForwardingPipelineConfig(ctx, &p4.GetForwardingPipelineConfigRequest{DeviceId: uint32(0)})
 	if err != nil {
 		log.Fatalf("Error with %v", err)
 	}
