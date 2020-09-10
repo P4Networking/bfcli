@@ -65,6 +65,10 @@ var (
 
 	p4Info       bfrt.BfRtInfo
 	nonP4Info    bfrt.BfRtInfo
+	preFixIg = "pipe.SwitchIngress."
+	preFixEg = "pipe.SwitchEgress."
+	preFixIgPar = "pipe.SwitchIngressParser."
+	preFixEgPar = "pipe.SwitchEgressParser."
 )
 
 func initConfigClient() (*p4.BfRuntimeClient, *context.Context, *grpc.ClientConn, context.CancelFunc, *bfrt.BfRtInfo, *bfrt.BfRtInfo) {

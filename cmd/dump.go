@@ -9,11 +9,6 @@ import (
 	"strings"
 )
 
-var (
-	preFixIg = "pipe.SwitchIngress."
-	preFixEg = "pipe.SwitchEgress."
-)
-
 // dumpCmd represents the dump command
 var dumpCmd = &cobra.Command{
 	Use:   "dump TABLE-NAME",
@@ -24,6 +19,13 @@ var dumpCmd = &cobra.Command{
 		defer conn.Close()
 		defer cancel()
 		argsList, _ := p4Info.GuessTableName(toComplete)
+		for k, v := range argsList {
+			if strings.Contains(v, preFixIgPar) || strings.Contains(v, preFixEgPar) {
+				argsList[k] = argsList[len(argsList)-1] // Copy last element to index i.
+				argsList[len(argsList)-1] = ""   // Erase last element (write zero value).
+				argsList = argsList[:len(argsList)-1]
+			}
+		}
 		return argsList, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
