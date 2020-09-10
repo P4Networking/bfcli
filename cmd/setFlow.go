@@ -7,13 +7,14 @@ import (
 	"github.com/P4Networking/proto/go/p4"
 	"github.com/spf13/cobra"
 	"log"
+	"strconv"
 	"strings"
 )
 
 var (
 	matchLists   []string
 	actionValues []string
-	ttl          int32 = -1
+	ttl          = ""
 )
 
 // setFlowCmd represents the setFlow command
@@ -65,6 +66,11 @@ var setFlowCmd = &cobra.Command{
 			fmt.Printf("Can not found action with names: %s\n", actionName)
 			return
 		}
+		dataId, ok := p4Info.GetDataId(tableName, "$ENTRY_TTL")
+		if ok && ttl == "" {
+			fmt.Printf("Please set the TTL value for table %s\n", table.Name)
+			return
+		}
 
 		collectedActionFieldIds, err := collectActionFieldIds(table, actionId, actionValues)
 		if err != nil {
@@ -97,13 +103,17 @@ var setFlowCmd = &cobra.Command{
 				}
 			}
 		}
-		if ttl >= 0 {
-			dataId, ok := p4Info.GetDataId(tableName, "$ENTRY_TTL")
+		if ttl != "" {
 			if !ok {
 				fmt.Println("ttl set failed")
 				return
 			}
-			action = append(action, util.GenDataField(dataId, util.Int32ToBytes(uint32(ttl)*1000)))
+			l, err :=strconv.ParseUint(ttl, 10 , 32)
+			if err != nil {
+				fmt.Printf("Please Check the TTL value %s.\n", ttl)
+				return
+			}
+			action = append(action, util.GenDataField(dataId, util.Int32ToBytes(uint32(l))))
 		}
 
 		fmt.Printf("   Make Write Request...")
@@ -120,5 +130,5 @@ func init() {
 	rootCmd.AddCommand(setFlowCmd)
 	setFlowCmd.Flags().StringSliceVarP(&matchLists, "match", "m", []string{}, "match arguments")
 	setFlowCmd.Flags().StringSliceVarP(&actionValues, "action", "a", []string{}, "action arguments")
-	setFlowCmd.Flags().Int32VarP(&ttl, "ttl", "t", ttl, "TTL arguments")
+	setFlowCmd.Flags().StringVarP(&ttl, "ttl", "t", ttl, "TTL arguments")
 }
