@@ -192,16 +192,16 @@ func IsNumber(s string) bool {
 }
 
 // checkMatchListType function checks that the input arguments are what kind of the match values.
-func checkMatchListType(value string) (uint, interface{}, interface{}) {
-	if _, e := net.ParseMAC(value); e == nil {
+func checkMatchListType(value string, bitWidth int) (uint, interface{}, interface{}) {
+	if _, e := net.ParseMAC(value); e == nil && bitWidth == INT64 {
 		return MAC_TYPE, util.MacToBytes(value), nil
-	} else if e := parseIPv4(value); strings.IndexByte(value, '/') < 0 && e != nil {
+	} else if e := parseIPv4(value); (strings.IndexByte(value, '/') < 0) && (e != nil) && (bitWidth <= INT32) {
 		return IP_TYPE, e, nil
-	} else if i, a, e := parseCIDR(value); e {
+	} else if i, a, e := parseCIDR(value); e && strings.IndexByte(value, '/') >= 0 {
 		return CIDR_TYPE, i, a
 	} else if maskType, arg := checkMaskType(value); maskType != -1 && arg != nil {
 		return MASK_TYPE, maskType, arg
-	} else if strings.HasPrefix(strings.ToLower(value), "0x") {
+	} else if strings.HasPrefix(strings.ToLower(value), "0x")  {
 		hexValue, e := strconv.ParseUint(value, 0, 16)
 		return HEX_TYPE, hexValue, e
 	} else if IsNumber(value) {
@@ -464,7 +464,7 @@ func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.
 func BuildMatchKeys(collectedMatchTypes *[]MatchSet) []*p4.KeyField {
 	match := util.Match()
 	for _, v := range *collectedMatchTypes {
-		mlt, v1, v2 := checkMatchListType(v.matchValue)
+		mlt, v1, v2 := checkMatchListType(v.matchValue, v.bitWidth)
 		// In EXACT case, v2 value is always nil.
 		if v.matchType == enums.MATCH_EXACT {
 			switch mlt {

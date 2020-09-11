@@ -39,8 +39,6 @@ var setFlowCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 
-		tableName := args[0]
-		actionName := args[1]
 		for a, v := range matchLists {
 			matchLists[a] = strings.Replace(v, " ", "", -1)
 		}
@@ -54,7 +52,20 @@ var setFlowCmd = &cobra.Command{
 		defer cancel()
 		cli := *cliAddr
 		ctx := *ctxAddr
+		argsList, _ := p4Info.GuessTableName(args[0])
+		if len(argsList) != 1 {
+			for _, v := range argsList {
+				strs := strings.Split(v, ".")
+				if strings.EqualFold(strs[2], args[0]) {
+					args[0] = v
+				}
+			}
+		} else {
+			args[0] = argsList[0]
+		}
 
+		tableName := args[0]
+		actionName := args[1]
 		tableId, ok := p4Info.GetTableId(tableName)
 		if uint32(tableId) == bfrt.ID_NOT_FOUND || !ok {
 			fmt.Printf("Can not found table with name: %s\n", tableName)
@@ -92,12 +103,15 @@ var setFlowCmd = &cobra.Command{
 
 		fmt.Printf("Make Match Data...")
 		match := BuildMatchKeys(&collectedMatchTypes)
+		if match == nil {
+			return
+		}
 
 		fmt.Printf("   Make Action Data...")
 		action := util.Action()
 		if len(collectedActionFieldIds) != 0 {
 			for _, v := range collectedActionFieldIds {
-				switch mlt, v1, _ := checkMatchListType(v.actionValue); mlt {
+				switch mlt, v1, _ := checkMatchListType(v.actionValue, v.parsedBitWidth); mlt {
 				case MAC_TYPE:
 					action = append(action, util.GenDataField(v.fieldId, v1.([]byte)))
 				case IP_TYPE:

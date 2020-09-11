@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 var (
@@ -22,7 +23,9 @@ var tableCmd = &cobra.Command{
 
 		//fmt.Println("------ The following is for P4 table ------")
 		for _, v := range p4Info.Tables {
-			fmt.Println(v.Name)
+			if strings.Contains(v.Name, preFixIg) || strings.Contains(v.Name, preFixEg) {
+				fmt.Println(v.Name)
+			}
 		}
 
 		if all {
