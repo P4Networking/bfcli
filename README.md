@@ -57,10 +57,22 @@ pisc-cli set-flow [TABLE NAME] [ACTION NAME] -m "match_key, ..." -a "action_valu
     pisc-cli set-flow rib SwitchIngress.hit_route -m "10.0.0.1/24" -a "10" 
     ```
 
-3. Ternary : acl example。對於Ternary，value與mask的長度以及形式必須要相同。
+3. Ternary : acl example。對於Ternary，value與mask的長度以及形式必須要相同。Ternary match key的區分僅能靠Match key的priority的欄位。PISC-CLI利用 match flag來題共設定priority。priority的設置方式與其他match key相同，且順序也是位於match的最後面。
+
     ```
-    pisc-cli set-flow pipe.SwitchIngress.acl SwitchIngress.output -m "10/10, 0x0800/0xffff, fa:aa:aa:aa:aa:fa/ff:ff:ff:ff:ff:ff, 127.0.0.1/255.255.255.255, 11.1.1.2/255.255.255.255" -a "0"
-    pisc-cli set-flow acl SwitchIngress.output -m "10/10, 0x0800/0xffff, fa:aa:aa:aa:aa:fa/ff:ff:ff:ff:ff:ff, 127.0.0.1/255.255.255.255, 11.1.1.2/255.255.255.255" -a "0"
+    pisc-cli set-flow pipe.SwitchIngress.arp SwitchIngress.arp_response -m "511/511, 0xffff, ffff, 255.255.255.255/255.255.255.255, 4000(priority value)" -a "ff:ff:ff:ff:ff:ff"    pisc-cli set-flow acl SwitchIngress.output -m "10/10, 0x0800/0xffff, fa:aa:aa:aa:aa:fa/ff:ff:ff:ff:ff:ff, 127.0.0.1/255.255.255.255, 11.1.1.2/255.255.255.255" -a "0"
+    ```
+
+## TTL - table TIMEOUT value setup
+SMAC table has an idle_timeout function. This function will send a notification to the controller to notify that the entry's life has expired and need to remove it.
+In PISC-CLI, it delivers TTL setting by -t flag on set-flow function. 
+The scale of the flag is milliseconds. min, max value of the TTL need to refer PISC.
+
+Example as following:
+
+    ```
+    pisc-cli set-flow pipe.SwitchIngress.smac SwitchIngress.smac_hit -m "ff:ff:ff:ff:ff:ff" -a "511" -t 60000
+    pisc-cli set-flow smac SwitchIngress.smac_hit -m "ff:ff:ff:ff:ff:ff" -a "511" -t 60000
     ```
 
 ## How to delete entry/entries from device?
@@ -78,9 +90,9 @@ pisc-cli del-flow [TABLE_NAME] [Flag] [Arguments]
     pisc-cli del-flow pipe.SwitchIngress.fib -a
     pisc-cli del-flow fib -a
     ```
-3. match : delete specific entry by match k.
+3. match : delete specific entry by match keys.
     the match flag acts like set-flow function.
-    the match flag need to specify talbe's match keys to delete entry.
+    the match flag need to specify table's match keys to delete entry.
     ```
     pisc-cli del-flow [TABLE_NAME] -m "Match key, ..."
     pisc-cli del-flow pipe.SwitchIngress.rib -m "192.168.1.7/255.255.255.255, 4000"
@@ -92,34 +104,34 @@ pisc-cli del-flow [TABLE_NAME] [Flag] [Arguments]
 pisc-cli [command] [TABLE_NAME]
 ```
 1. table : list all table name.
-```
-pisc-cli table
-```
+    ```
+    pisc-cli table
+    ```
 2. dump :  dump all entries of the table. 
-```
-pisc-cli dump [TABLE_NAME]
-pisc-cli dump pipe.SwitchIngress.fib or pisc-cli dump fib
-```
-```
-// dump all tables entries
-pisc-cli dump -a
-// dump all entries counts of the table.
-pisc-cli dump -c 
-// also can dump all tables entries counts.
-pisc-cli dump -a -c
-```
+    ```
+    pisc-cli dump [TABLE_NAME]
+    pisc-cli dump pipe.SwitchIngress.fib or pisc-cli dump fib
+    ```
+    ```
+    // dump all tables entries
+    pisc-cli dump -a
+    // dump all entries counts of the table.
+    pisc-cli dump -c 
+    // also can dump all tables entries counts.
+    pisc-cli dump -a -c
+    ```
 3. info : show table information to the user
-```
-pisc-cli info [TALBE_NAME]
-```
+    ```
+    pisc-cli info [TALBE_NAME]
+    ```
 
 ## Show version and logo
 1. show version
-```
-pisc-cli version
-```
+    ```
+    pisc-cli version
+    ```
 
 2. show logo of PISC
-```
-pisc-cli version -l
-```
+    ```
+    pisc-cli version -l
+    ```
