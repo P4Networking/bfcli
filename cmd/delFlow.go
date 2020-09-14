@@ -55,16 +55,18 @@ var delFlowCmd = &cobra.Command{
 		cli := *cliAddr
 		ctx := *ctxAddr
 
-		argsList, _ := p4Info.GuessTableName(args[0])
-		if len(argsList) != 1 {
-			for _, v := range argsList {
-				strs := strings.Split(v, ".")
-				if strings.EqualFold(strs[2], args[0]) {
-					args[0] = v
+		if !reset {
+			argsList, _ := p4Info.GuessTableName(args[0])
+			if len(argsList) != 1 {
+				for _, v := range argsList {
+					strs := strings.Split(v, ".")
+					if strings.EqualFold(strs[2], args[0]) {
+						args[0] = v
+					}
 				}
+			} else {
+				args[0] = argsList[0]
 			}
-		} else {
-			args[0] = argsList[0]
 		}
 
 		for _, v := range p4Info.Tables {

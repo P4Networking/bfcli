@@ -44,20 +44,23 @@ pisc-cli set-flow [TABLE NAME] [ACTION NAME] -m "match_key, ..." -a "action_valu
 且Match key和Action value的寫入順序必須要跟pipeline所設定的順序相同。
 
 
-1. Exact : smac table example
+>設table key的時候請務必確認，你所設定的值是否跟table所需要的值是一致的，假如說table需要MAC Addr，但卻你下的指令是沒有格式的數字或IP, 這樣會直接設下去，且會產生問題。
+
+1. Exact : smac table example. 
     ```
     pisc-cli set-flow pipe.SwitchIngress.smac SwitchIngress.smac_hit -m "aa:aa:aa:aa:aa:aa" -a "10"
     ```
     
 2. LPM : rib table example。對於LPM, 必須要按照CIDR的形式輸入，否則會出現error.
     ```
-     pisc-cli set-flow pipe.SwitchIngress.rib SwitchIngress.hit_route -m "10.0.0.1/24" -a "10"
+    pisc-cli set-flow pipe.SwitchIngress.rib SwitchIngress.hit_route -m "10.0.0.1/24" -a "10"
+    pisc-cli set-flow rib SwitchIngress.hit_route -m "10.0.0.1/24" -a "10" 
     ```
 
 3. Ternary : acl example。對於Ternary，value與mask的長度以及形式必須要相同。
     ```
     pisc-cli set-flow pipe.SwitchIngress.acl SwitchIngress.output -m "10/10, 0x0800/0xffff, fa:aa:aa:aa:aa:fa/ff:ff:ff:ff:ff:ff, 127.0.0.1/255.255.255.255, 11.1.1.2/255.255.255.255" -a "0"
-
+    pisc-cli set-flow acl SwitchIngress.output -m "10/10, 0x0800/0xffff, fa:aa:aa:aa:aa:fa/ff:ff:ff:ff:ff:ff, 127.0.0.1/255.255.255.255, 11.1.1.2/255.255.255.255" -a "0"
     ```
 
 ## How to delete entry/entries from device?
@@ -73,13 +76,15 @@ pisc-cli del-flow [TABLE_NAME] [Flag] [Arguments]
     // Do not confuse with set-flow's "-a" flag. It's totally diffrent.
     pisc-cli del-flow [TABLE_NAME] -a
     pisc-cli del-flow pipe.SwitchIngress.fib -a
+    pisc-cli del-flow fib -a
     ```
-3. match : delete specific entry by match key.
+3. match : delete specific entry by match k.
     the match flag acts like set-flow function.
     the match flag need to specify talbe's match keys to delete entry.
     ```
     pisc-cli del-flow [TABLE_NAME] -m "Match key, ..."
     pisc-cli del-flow pipe.SwitchIngress.rib -m "192.168.1.7/255.255.255.255, 4000"
+    pisc-cli del-flow rib -m "192.168.1.7/255.255.255.255, 4000"
     ```
 
 ## How to show the table and entries information?
@@ -90,10 +95,18 @@ pisc-cli [command] [TABLE_NAME]
 ```
 pisc-cli table
 ```
-2. dump :  dump all entries of the table, also -a flag will dump all tables.
+2. dump :  dump all entries of the table. 
 ```
 pisc-cli dump [TABLE_NAME]
+pisc-cli dump pipe.SwitchIngress.fib or pisc-cli dump fib
+```
+```
+// dump all tables entries
 pisc-cli dump -a
+// dump all entries counts of the table.
+pisc-cli dump -c 
+// also can dump all tables entries counts.
+pisc-cli dump -a -c
 ```
 3. info : show table information to the user
 ```

@@ -8,6 +8,10 @@ import (
 	"log"
 	"strings"
 )
+var (
+	// all bool(define in table.go)
+	count bool
+)
 
 // dumpCmd represents the dump command
 var dumpCmd = &cobra.Command{
@@ -71,8 +75,11 @@ var dumpCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("Got error, %v \n", err.Error())
 			}
-
-			DumpEntries(&stream, table)
+			if count {
+				DumpEntriesCount(&stream, table)
+			} else {
+				DumpEntries(&stream, table)
+			}
 		case true:
 			for _, v := range p4Info.Tables {
 				if strings.HasPrefix(v.Name, preFixIg) || strings.HasPrefix(v.Name, preFixEg) {
@@ -85,8 +92,11 @@ var dumpCmd = &cobra.Command{
 					if err != nil {
 						log.Fatalf("Got error, %v \n", err.Error())
 					}
-
-					DumpEntries(&stream, table)
+					if count {
+						DumpEntriesCount(&stream, table)
+					} else {
+						DumpEntries(&stream, table)
+					}
 				}
 			}
 		}
@@ -96,4 +106,5 @@ var dumpCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(dumpCmd)
 	dumpCmd.Flags().BoolVarP(&all, "all", "a", false, "dump all of the tables")
+	dumpCmd.Flags().BoolVarP(&count, "count", "c", false, "dump entries number of counts")
 }

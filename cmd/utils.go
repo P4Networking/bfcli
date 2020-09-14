@@ -63,10 +63,10 @@ type ActionSet struct {
 var (
 	DEFAULT_ADDR = ":50000"
 
-	p4Info       bfrt.BfRtInfo
-	nonP4Info    bfrt.BfRtInfo
-	preFixIg = "pipe.SwitchIngress."
-	preFixEg = "pipe.SwitchEgress."
+	p4Info      bfrt.BfRtInfo
+	nonP4Info   bfrt.BfRtInfo
+	preFixIg    = "pipe.SwitchIngress."
+	preFixEg    = "pipe.SwitchEgress."
 	preFixIgPar = "pipe.SwitchIngressParser."
 	preFixEgPar = "pipe.SwitchEgressParser."
 )
@@ -201,7 +201,7 @@ func checkMatchListType(value string, bitWidth int) (uint, interface{}, interfac
 		return CIDR_TYPE, i, a
 	} else if maskType, arg := checkMaskType(value); maskType != -1 && arg != nil {
 		return MASK_TYPE, maskType, arg
-	} else if strings.HasPrefix(strings.ToLower(value), "0x")  {
+	} else if strings.HasPrefix(strings.ToLower(value), "0x") {
 		hexValue, e := strconv.ParseUint(value, 0, 16)
 		return HEX_TYPE, hexValue, e
 	} else if IsNumber(value) {
@@ -351,6 +351,31 @@ func parseIPv4(s string) []byte {
 	return p
 ERROR:
 	return nil
+}
+
+func DumpEntriesCount(stream *p4.BfRuntime_ReadClient, p4table *bfrt.Table) {
+	for {
+		rsp, err := (*stream).Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatalf("Got error: %v", err)
+		}
+		Entities := rsp.GetEntities()
+		cnt := 0
+		if len(Entities) == 0 {
+			fmt.Printf("The \"%s\" table is empty\n", p4table.Name)
+		} else {
+			for _, v := range Entities {
+				if v.GetTableEntry().IsDefaultEntry{
+					continue
+				}
+				cnt++
+			}
+			fmt.Printf("Table \"%s\" has %d entries.\n", p4table.Name, cnt)
+		}
+	}
 }
 
 // DumpEntries function reads entries from ReadRequest response, and the function print all of the entries.

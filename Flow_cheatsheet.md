@@ -15,6 +15,37 @@ pisc-cli set-flow pipe.SwitchEgress.smac_rewrite_by_portid SwitchEgress.rewrite_
 pisc-cli set-flow pipe.SwitchIngress.arp SwitchIngress.arp_response -m "511/511, 0xffff, 0xffff, 255.255.255.255/255.255.255.255, 4000" -a "ff:ff:ff:ff:ff:ff"
 pisc-cli set-flow pipe.SwitchIngress.acl SwitchIngress.output -m "511/511, 0xffff/0xffff, aa:aa:aa:aa:aa:aa/ff:ff:ff:ff:ff:ff, 255.255.255.255/255.255.255.255, 255.255.255.255/255.255.255.255, 255/255, 4000" -a "10"
 pisc-cli set-flow pipe.SwitchIngress.smac SwitchIngress.smac_hit -m "ff:ff:ff:ff:ff:ff" -a "511" -t 600
+
+pisc-cli set-flow rmac SwitchIngress.rmac_hit -m "ff:ff:ff:ff:ff:ff" -a ""
+pisc-cli set-flow dmac SwitchIngress.dmac_hit -m "ff:ff:ff:ff:ff:ff" -a "511"
+pisc-cli set-flow fib  SwitchIngress.hit_route_port -m "255.255.255.255" -a "511"
+pisc-cli set-flow rib_24 SwitchIngress.hit_route_port -m "255.255.255" -a "511"
+pisc-cli set-flow rib_20 SwitchIngress.hit_route_port -m "15.255.255" -a "511"
+pisc-cli set-flow rib_16 SwitchIngress.hit_route_port -m "255.255" -a "511"
+pisc-cli set-flow rib_12 SwitchIngress.hit_route_port -m "15.255" -a "511"
+pisc-cli set-flow rib_8 SwitchIngress.hit_route_port -m "255" -a "511"
+pisc-cli set-flow rib SwitchIngress.hit_route_port -m "255.255.255.255/255.255.255.255, 4000" -a "511"
+pisc-cli set-flow nexthop SwitchIngress.set_nexthop -m "255" -a "511, ff:ff:ff:ff:ff:ff"
+pisc-cli set-flow smac_rewrite_by_portid SwitchEgress.rewrite_smac -m "511/511, 4000" -a "ff:ff:ff:ff:ff:ff"
+pisc-cli set-flow arp SwitchIngress.arp_response -m "511/511, 0xffff, 0xffff, 255.255.255.255/255.255.255.255, 4000" -a "ff:ff:ff:ff:ff:ff"
+pisc-cli set-flow acl SwitchIngress.output -m "511/511, 0xffff/0xffff, aa:aa:aa:aa:aa:aa/ff:ff:ff:ff:ff:ff, 255.255.255.255/255.255.255.255, 255.255.255.255/255.255.255.255, 255/255, 4000" -a "10"
+pisc-cli set-flow smac SwitchIngress.smac_hit -m "ff:ff:ff:ff:ff:ff" -a "511" -t 60000
+
+pisc-cli set-flow rmac SwitchIngress.rmac_hit -m "ff:ff:ff:ff:ff:ff" -a ""
+pisc-cli set-flow dmac SwitchIngress.dmac_hit -m "ff:ff:ff:ff:ff:ff" -a "511"
+pisc-cli set-flow fib  SwitchIngress.hit_route_port -m "255.255.255.255" -a "511"
+pisc-cli set-flow rib_24 SwitchIngress.hit_route_port -m "255.255.255" -a "511"
+pisc-cli set-flow rib_20 SwitchIngress.hit_route_port -m "15.255.255" -a "511"
+pisc-cli set-flow rib_16 SwitchIngress.hit_route_port -m "255.255" -a "511"
+pisc-cli set-flow rib_12 SwitchIngress.hit_route_port -m "15.255" -a "511"
+pisc-cli set-flow rib_8 SwitchIngress.hit_route_port -m "255" -a "511"
+pisc-cli set-flow rib SwitchIngress.hit_route_port -m "255.255.255.255/255.255.255.255, 4000" -a "511"
+pisc-cli set-flow nexthop SwitchIngress.set_nexthop -m "255" -a "511, ff:ff:ff:ff:ff:ff"
+pisc-cli set-flow smac_rewrite_by_portid SwitchEgress.rewrite_smac -m "511/511, 4000" -a "ff:ff:ff:ff:ff:ff"
+pisc-cli set-flow arp SwitchIngress.arp_response -m "511/511, 0xffff, 0xffff, 255.255.255.255/255.255.255.255, 4000" -a "ff:ff:ff:ff:ff:ff"
+pisc-cli set-flow acl SwitchIngress.output -m "511/511, 0xffff/0xffff, aa:aa:aa:aa:aa:aa/ff:ff:ff:ff:ff:ff, 255.255.255.255/255.255.255.255, 255.255.255.255/255.255.255.255, 255/255, 4000" -a "10"
+pisc-cli set-flow smac SwitchIngress.smac_hit -m "ff:ff:ff:ff:ff:ff" -a "511" -t 60000
+
 ```
 
 
@@ -33,4 +64,19 @@ pisc-cli del-flow pipe.SwitchEgress.smac_rewrite_by_portid -m "511/511, 4000"
 pisc-cli del-flow pipe.SwitchIngress.arp -m "511/511, 0xffff, 0xffff, 255.255.255.255/255.255.255.255, 4000"
 pisc-cli del-flow pipe.SwitchIngress.acl -m "511/511, 0xffff/0xffff, aa:aa:aa:aa:aa:aa/ff:ff:ff:ff:ff:ff, 255.255.255.255/255.255.255.255, 255.255.255.255/255.255.255.255, 255/255, 4000"
 pisc-cli del-flow pipe.SwitchIngress.smac -m "ff:ff:ff:ff:ff:ff"
+
+pisc-cli del-flow rmac -m "ff:ff:ff:ff:ff:ff"
+pisc-cli del-flow dmac -m "ff:ff:ff:ff:ff:ff"
+pisc-cli del-flow fib -m "255.255.255.255" 
+pisc-cli del-flow rib_24 -m "255.255.255" 
+pisc-cli del-flow rib_20 -m "15.255.255"
+pisc-cli del-flow rib_16 -m "255.255"
+pisc-cli del-flow rib_12 -m "15.255"
+pisc-cli del-flow rib_8 -m "255" 
+pisc-cli del-flow rib -m "255.255.255.255/255.255.255.255, 4000" 
+pisc-cli del-flow nexthop -m "255"
+pisc-cli del-flow smac_rewrite_by_portid -m "511/511, 4000" 
+pisc-cli del-flow arp -m "511/511, 0xffff, 0xffff, 255.255.255.255/255.255.255.255, 4000"
+pisc-cli del-flow acl -m "511/511, 0xffff/0xffff, aa:aa:aa:aa:aa:aa/ff:ff:ff:ff:ff:ff, 255.255.255.255/255.255.255.255, 255.255.255.255/255.255.255.255, 255/255, 4000"
+pisc-cli del-flow smac -m "ff:ff:ff:ff:ff:ff"
 ```
