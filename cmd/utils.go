@@ -474,7 +474,20 @@ func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.
 		if delReq == nil {
 			delReq = util.GenWriteRequestWithId(p4.Update_DELETE, id.TableId(tbl.TableId), tbl.Key.Fields, nil)
 		} else {
-			delReq.Updates = append(delReq.Updates, util.GenUpdateWithId(p4.Update_DELETE, id.TableId(tbl.TableId), tbl.Key.Fields, nil))
+			delReq.Updates = append(delReq.Updates, &p4.Update{
+				Type: p4.Update_DELETE,
+				Entity: &p4.Entity{
+					Entity: &p4.Entity_TableEntry{
+						TableEntry: &p4.TableEntry{
+							TableId: tbl.TableId,
+							Key: &p4.TableKey{
+								Fields: tbl.Key.Fields,
+							},
+							Data: nil,
+						},
+					},
+				},
+			})
 		}
 		result = append(result, k)
 	}
