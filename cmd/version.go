@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	logo bool
-	version bool
+	logo     bool
+	version  bool
 	piscLogo string
 )
 
@@ -16,13 +16,13 @@ var (
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show the pisc-cli version information",
-	Long: `Show the pisc-cli version information`,
+	Long:  `Show the pisc-cli version information`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if logo {
 			callLogo()
 			fmt.Println(piscLogo)
 		}
-		fmt.Println("Version Called")
+		fmt.Println("Version : 0.1.0")
 	},
 }
 
@@ -41,17 +41,7 @@ func callLogo() {
 			"|__/\n"
 }
 
-
 func init() {
 	rootCmd.AddCommand(versionCmd)
 	versionCmd.Flags().BoolVarP(&logo, "logo", "l", false, "")
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// versionCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// versionCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

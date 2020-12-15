@@ -2,8 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/P4Networking/pisc/util"
+	"github.com/P4Networking/pisc/southbound/bfrt"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 // infoCmd represents the info command
@@ -16,7 +17,18 @@ var infoCmd = &cobra.Command{
 		_, _, conn, cancel, p4Info, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
-		argsList, _ := p4Info.GuessTableName(toComplete)
+
+		var argsList []string
+		for _, v := range p4Info.Tables {
+			if strings.Contains(v.Name, preFixIg) || strings.Contains(v.Name, preFixEg) {
+				strs := strings.Split(v.Name, ".")
+				if toComplete == "" || strings.Contains(toComplete, "pipe") {
+					argsList = append(argsList, v.Name)
+				} else {
+					argsList = append(argsList, strs[2])
+				}
+			}
+		}
 		return argsList, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
@@ -33,14 +45,25 @@ var infoCmd = &cobra.Command{
 			return
 		}
 		*/
+		argsList, _ := p4Info.GuessTableName(args[0])
+		if len(argsList) != 1 {
+			for _, v := range argsList {
+				strs := strings.Split(v, ".")
+				if strings.EqualFold(strs[2], args[0]) {
+					args[0] = v
+				}
+			}
+		} else {
+			args[0] = argsList[0]
+		}
 
-		tableId := p4Info.SearchTableId(args[0])
-		if uint32(tableId) == util.ID_NOT_FOUND {
-			fmt.Printf("Can not found table with name: %s\n", args[0])
+		tableId, _ := p4Info.GetTableId(args[0])
+		if uint32(tableId) == bfrt.ID_NOT_FOUND {
+			fmt.Printf("Can't found table with name: %s\n", args[0])
 			return
 		}
 
-		table := p4Info.SearchTableById(tableId)
+		table, _ := p4Info.GetTableById(tableId)
 		if table == nil {
 			fmt.Printf("Can not found table with Id %d\n", tableId)
 			return
@@ -63,7 +86,11 @@ var infoCmd = &cobra.Command{
 		if table.Annotations != nil {
 			fmt.Printf("  %-12s:\n", "Annotations")
 			for k, v := range table.Annotations {
-				fmt.Printf("%d - Name: %s | Value: %s \n", k+1, v.Name, v.Value)
+				if v.Value != "" {
+					fmt.Printf("  %d - Name: %s | Value: %s \n", k+1, v.Name, v.Value)
+				} else {
+					fmt.Printf("    %d - Name: %s \n", k+1, v.Name)
+				}
 			}
 		}
 		if table.DependsOn != nil {
@@ -76,11 +103,13 @@ var infoCmd = &cobra.Command{
 			fmt.Printf("  %-8s %-20s %-11s %-10s %-9s %-8s %-4s",
 				"KeyId", "Name", "Match_type", "Mandatory", "Repeated", "Type", "Width\n")
 			for _, v := range table.Key {
-				if v.ID == 65537 || v.Name == "$MATCH_PRIORITY" {
-					continue
+				if v.Name == "$MATCH_PRIORITY" {
+					fmt.Printf("  %-8d %-20s %-11s %-10t %-9t %-8s %-4d\n",
+						v.ID, v.Name, v.MatchType, v.Mandatory, v.Repeated, v.Type.Type, 32)
+				} else {
+					fmt.Printf("  %-8d %-20s %-11s %-10t %-9t %-8s %-4d\n",
+						v.ID, v.Name, v.MatchType, v.Mandatory, v.Repeated, v.Type.Type, v.Type.Width)
 				}
-				fmt.Printf("  %-8d %-20s %-11s %-10t %-9t %-8s %-4d\n",
-					v.ID, v.Name, v.MatchType, v.Mandatory, v.Repeated, v.Type.Type, v.Type.Width)
 			}
 		}
 
@@ -118,14 +147,4 @@ var infoCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(infoCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// infoCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// infoCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

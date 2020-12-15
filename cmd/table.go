@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 var (
@@ -22,7 +23,9 @@ var tableCmd = &cobra.Command{
 
 		//fmt.Println("------ The following is for P4 table ------")
 		for _, v := range p4Info.Tables {
-			fmt.Println(v.Name)
+			if strings.Contains(v.Name, preFixIg) || strings.Contains(v.Name, preFixEg) {
+				fmt.Println(v.Name)
+			}
 		}
 
 		if all {
@@ -37,14 +40,4 @@ var tableCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(tableCmd)
 	tableCmd.Flags().BoolVarP(&all, "all", "a", false, "Show all tables")
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// tableCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// tableCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
