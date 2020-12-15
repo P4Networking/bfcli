@@ -2,15 +2,15 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/P4Networking/pisc/util"
+	"github.com/P4Networking/pisc/southbound/bfrt"
+	"github.com/P4Networking/pisc/util/enums/id"
 	"github.com/spf13/cobra"
 	"log"
 	"strings"
 )
-
 var (
-	preFixIg = "pipe.SwitchIngress."
-	preFixEg = "pipe.SwitchEgress."
+	// all bool(define in table.go)
+	count bool
 )
 
 // dumpCmd represents the dump command
@@ -22,7 +22,17 @@ var dumpCmd = &cobra.Command{
 		_, _, conn, cancel, p4Info, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
-		argsList, _ := p4Info.GuessTableName(toComplete)
+		var argsList []string
+		for _, v := range p4Info.Tables {
+			if strings.Contains(v.Name, preFixIg) || strings.Contains(v.Name, preFixEg) {
+				strs := strings.Split(v.Name, ".")
+				if toComplete == "" || strings.Contains(toComplete, "pipe") {
+					argsList = append(argsList, v.Name)
+				} else {
+					argsList = append(argsList, strs[2])
+				}
+			}
+		}
 		return argsList, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
@@ -38,37 +48,55 @@ var dumpCmd = &cobra.Command{
 				cmd.Help()
 				return
 			}
-			tableId := p4Info.SearchTableId(args[0])
-			if uint32(tableId) == util.ID_NOT_FOUND {
+
+			argsList, _ := p4Info.GuessTableName(args[0])
+			if len(argsList) != 1 {
+				for _, v := range argsList {
+					strs := strings.Split(v, ".")
+					if strings.EqualFold(strs[2], args[0]) {
+						args[0] = v
+					}
+				}
+			} else {
+				args[0] = argsList[0]
+			}
+
+			tableId, ok := p4Info.GetTableId(args[0])
+			if uint32(tableId) == bfrt.ID_NOT_FOUND || !ok {
 				fmt.Printf("Can not found table with name: %s\n", args[0])
 				return
 			}
-			table := p4Info.SearchTableById(tableId)
-			if table == nil {
+			table, ok := p4Info.GetTableById(tableId)
+			if !ok {
 				fmt.Printf("Can not found table with ID: %d\n", tableId)
 				return
 			}
-
-			stream, err := cli.Read(ctx, genReadRequestWithId(uint32(table.ID)))
+			stream, err := cli.Read(ctx, genReadRequestWithId(table.ID))
 			if err != nil {
 				log.Fatalf("Got error, %v \n", err.Error())
 			}
-
-			DumpEntries(&stream, table)
+			if count {
+				DumpEntriesCount(&stream, table)
+			} else {
+				DumpEntries(&stream, table)
+			}
 		case true:
 			for _, v := range p4Info.Tables {
 				if strings.HasPrefix(v.Name, preFixIg) || strings.HasPrefix(v.Name, preFixEg) {
-					table := p4Info.SearchTableById(v.ID)
+					table, _ := p4Info.GetTableById(id.TableId(v.ID))
 					if table == nil {
 						fmt.Printf("Can not found table with ID: %v\n", v.ID)
 						return
 					}
-					stream, err := cli.Read(ctx, genReadRequestWithId(uint32(v.ID)))
+					stream, err := cli.Read(ctx, genReadRequestWithId(v.ID))
 					if err != nil {
 						log.Fatalf("Got error, %v \n", err.Error())
 					}
-
-					DumpEntries(&stream, table)
+					if count {
+						DumpEntriesCount(&stream, table)
+					} else {
+						DumpEntries(&stream, table)
+					}
 				}
 			}
 		}
@@ -78,4 +106,5 @@ var dumpCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(dumpCmd)
 	dumpCmd.Flags().BoolVarP(&all, "all", "a", false, "dump all of the tables")
+	dumpCmd.Flags().BoolVarP(&count, "count", "c", false, "dump entries number of counts")
 }
