@@ -1,115 +1,189 @@
 package cmd
 
 import (
+	"bufio"
+	"flag"
 	"fmt"
-	"github.com/P4Networking/pisc/southbound/bfrt"
 	"github.com/P4Networking/pisc/util"
+	"github.com/P4Networking/pisc/util/enums/id"
 	"github.com/P4Networking/proto/go/p4"
 	"github.com/spf13/cobra"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 )
 
 var (
-	matchLists   []string
-	actionValues []string
-	ttl          = ""
+	matchKeyList	[]string
+	actionValues	[]string
+	ttl				= ""
+	file			string
+
+	filedata [][]string
 )
 
 // setFlowCmd represents the setFlow command
 var setFlowCmd = &cobra.Command{
 	Use:   "set-flow TABLE_NAME ACTION-NAME ",
 	Short: "Set flow into table",
-	Long:  `Insert the flow to table with action`,
-	Args:  cobra.ExactArgs(2),
+	Long:  "Insert the flow to table with action",
+	Args:  cobra.MaximumNArgs(2),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		_, _, conn, cancel, p4Info, _ := initConfigClient()
+		_, _, conn, cancel, _, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
-		argsList, _ := p4Info.GuessTableName(toComplete)
-		for k, v := range argsList {
+		table, _ := Obj.p4Info.GuessTableName(toComplete)
+		for k, v := range table {
 			if strings.Contains(v, preFixIgPar) || strings.Contains(v, preFixEgPar) {
-				argsList[k] = argsList[len(argsList)-1] // Copy last element to index i.
-				argsList[len(argsList)-1] = ""   // Erase last element (write zero value).
-				argsList = argsList[:len(argsList)-1]
+				table[k] = table[len(table)-1] // Copy last element to index i.
+				table[len(table)-1] = ""   // Erase last element (write zero value).
+				table = table[:len(table)-1]
 			}
 		}
-		return argsList, cobra.ShellCompDirectiveNoFileComp
+		return table, cobra.ShellCompDirectiveNoFileComp
+	},
+	PreRun: func(cmd *cobra.Command, args []string) {
+
+		if cmd.Flag("file").Changed && (cmd.Flag("match").Changed || cmd.Flag("action").Changed || cmd.Flag("ttl").Changed) {
+			fmt.Println(fmt.Errorf("file flag can only exist alone."))
+			os.Exit(1)
+		}
+		if cmd.Flag("file").Changed {
+			fptr := flag.String("fpath", file, "file path to read from")
+			flag.Parse()
+			f, err := os.Open(*fptr)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer func() {
+				if err = f.Close(); err != nil {
+				log.Fatal(err)
+			}
+			}()
+			s := bufio.NewScanner(f)
+			for s.Scan() {
+				filedata = append(filedata, strings.Split(strings.ReplaceAll(s.Text(), ", ", ","), " "))
+			}
+			err = s.Err()
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-
-		for a, v := range matchLists {
-			matchLists[a] = strings.Replace(v, " ", "", -1)
+		if cmd.Flag("file").Changed {
+			setFlowSub.Flags().StringSliceVarP(&matchKeyList, "match", "m", []string{}, "match key arguments")
+			setFlowSub.Flags().StringSliceVarP(&actionValues, "action", "a", []string{}, "action arguments")
+			setFlowSub.Flags().StringVarP(&ttl, "ttl", "t", "", "TTL arguments")
+			for _, line := range filedata {
+				err := setFlowSub.ParseFlags(line)
+				matchKeyList = strings.Split(matchKeyList[0], ",")
+				if actionValues[0] == ""{
+					actionValues = nil
+				} else {
+					actionValues = strings.Split(actionValues[0], ",")
+				}
+				if err != nil {
+						panic(err)
+				}
+				setFlowSub.Run(cmd, line[:2])
+				matchKeyList = nil
+				actionValues = nil
+				ttl = ""
+			}
+		} else {
+			setFlowSub.Flags().StringSliceVarP(&matchKeyList, "match", "m", matchKeyList, "match key arguments")
+			setFlowSub.Flags().StringSliceVarP(&actionValues, "action", "a", actionValues, "action arguments")
+			setFlowSub.Flags().StringVarP(&ttl, "ttl", "t", ttl, "TTL arguments")
+			setFlowSub.Run(cmd,args)
 		}
+	},
+}
 
-		for a, v := range actionValues {
-			actionValues[a] = strings.Replace(v, " ", "", -1)
-		}
-
-		cliAddr, ctxAddr, conn, cancel, p4Info, _ := initConfigClient()
+var setFlowSub = &cobra.Command{
+	Run: func(cmd *cobra.Command, args []string) {
+		ObjInit()
+		cliAddr, ctxAddr, conn, cancel, _, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
 		cli := *cliAddr
 		ctx := *ctxAddr
-		argsList, _ := p4Info.GuessTableName(args[0])
-		if len(argsList) != 1 {
-			for _, v := range argsList {
-				strs := strings.Split(v, ".")
-				if strings.EqualFold(strs[2], args[0]) {
-					args[0] = v
+		for a, v := range matchKeyList {
+			matchKeyList[a] = strings.TrimSpace(v)
+		}
+		for a, v := range actionValues {
+			actionValues[a] = strings.TrimSpace(v)
+		}
+		// find the table that have substring
+		for _, tb := range Obj.p4Info.Tables {
+			if strings.Contains(tb.Name, args[0]) {
+				Obj.table = append(Obj.table, tb)
+			}
+		}
+		if len(Obj.table) > 1 {
+			fmt.Println(fmt.Errorf("Too many tables matched."))
+			for _, k := range Obj.table {
+				fmt.Printf("Table : %s\n", k.Name)
+			}
+			return
+		}
+		if len(Obj.table) <= 0 {
+			fmt.Println(fmt.Errorf("No tables matched.\n"))
+			return
+		}
+
+		//Obj.actions = make(map[uint32]string, 0)
+		for _, table := range Obj.table {
+			for _, actionSpec := range table.ActionSpecs {
+				if strings.Contains(actionSpec.Name, args[1]) {
+					Obj.actions[actionSpec.ID] = actionSpec.Name
+					Obj.actionId = actionSpec.ID
+					Obj.actionName = actionSpec.Name
 				}
 			}
-		} else {
-			args[0] = argsList[0]
 		}
-
-		tableName := args[0]
-		actionName := args[1]
-		tableId, ok := p4Info.GetTableId(tableName)
-		if uint32(tableId) == bfrt.ID_NOT_FOUND || !ok {
-			fmt.Printf("Can not found table with name: %s\n", tableName)
+		if len(Obj.actions) > 1 {
+			fmt.Println(fmt.Errorf("Too many actions matched.\n"))
 			return
 		}
-		table, _ := p4Info.GetTableById(tableId)
+		if len(Obj.actions) <= 0 {
+			fmt.Println(fmt.Errorf("No actions have matched.\n"))
+			return
+		}
 
-		collectedMatchTypes, ok := collectTableMatchTypes(table, &matchLists)
+		collectedMatchTypes, ok := collectTableMatchTypes(&matchKeyList)
 		if !ok {
-			fmt.Println("Match keys are not matched")
+			fmt.Println("Match key length isn't match")
 			return
 		}
 
-		actionId, ok := p4Info.GetActionId(tableName, actionName)
-		if actionId == bfrt.ID_NOT_FOUND || !ok {
-			fmt.Printf("Can not found action with names: %s\n", actionName)
-			return
-		}
-		dataId, ok := p4Info.GetDataId(tableName, "$ENTRY_TTL")
+		ttlId, ok := Obj.p4Info.GetDataId(Obj.table[0].Name, "$ENTRY_TTL")
 		if ok && ttl == "" {
-			fmt.Printf("Please set the TTL value for table %s\n", table.Name)
-			return
+			fmt.Println("table has ttl entry but it's not set, using default value 600 for ttl")
+			ttl = "600"
 		}
 
-		collectedActionFieldIds, err := collectActionFieldIds(table, actionId, actionValues)
+		collectedActionFieldIds, err := collectActionFieldIds(&Obj.table[0], Obj.actionId, actionValues)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 		if len(collectedActionFieldIds) != len(actionValues) {
-			fmt.Printf("Length of action fields [%d] != Length of action args [%d]\n", len(collectedActionFieldIds), len(actionValues))
+			fmt.Printf("expected action field length : %d, received action filed length [%d]\n", len(collectedActionFieldIds), len(actionValues))
 			fmt.Println("Check action arguments")
 			return
 		}
 
-		fmt.Printf("Make Match Data...")
+		//fmt.Printf("Make Match Data...")
 		match := BuildMatchKeys(&collectedMatchTypes)
 		if match == nil {
 			return
 		}
 
-		fmt.Printf("   Make Action Data...")
+		//fmt.Printf("   Make Action Data...")
 		action := util.Action()
-		if len(collectedActionFieldIds) != 0 {
+		if len(collectedActionFieldIds) > 0 {
 			for _, v := range collectedActionFieldIds {
 				switch mlt, v1, _ := checkMatchListType(v.actionValue, v.parsedBitWidth); mlt {
 				case MAC_TYPE:
@@ -124,32 +198,32 @@ var setFlowCmd = &cobra.Command{
 				}
 			}
 		}
-		if ttl != "" {
-			if !ok {
-				fmt.Println("ttl set failed")
-				return
-			}
-			l, err :=strconv.ParseUint(ttl, 10 , 32)
+
+		if ok {
+			l, err := strconv.ParseUint(ttl, 10, 32)
 			if err != nil {
 				fmt.Printf("Please Check the TTL value %s.\n", ttl)
 				return
 			}
-			action = append(action, util.GenDataField(dataId, util.Int32ToBytes(uint32(l))))
+			action = append(action, util.GenDataField(ttlId, util.Int32ToBytes(uint32(l))))
 		}
 
-		fmt.Printf("   Make Write Request...")
-		var req = util.GenWriteRequestWithId(p4.Update_INSERT, tableId, match, &p4.TableData{ActionId: actionId, Fields: action})
+		//fmt.Printf("   Make Write Request...\n")
+		var req = util.GenWriteRequestWithId(p4.Update_INSERT, id.TableId(Obj.table[0].ID), match, &p4.TableData{ActionId: Obj.actionId, Fields: action})
 		if _, err := cli.Write(ctx, req); err != nil {
-			log.Printf("Got error, %v \n", err.Error())
-		} else {
-			fmt.Printf("   Write Done.\n")
+			log.Printf("Got an error, %v \n", err.Error())
+			return
 		}
+
+		fmt.Printf("Write Done.\n")
 	},
 }
 
+
 func init() {
 	rootCmd.AddCommand(setFlowCmd)
-	setFlowCmd.Flags().StringSliceVarP(&matchLists, "match", "m", []string{}, "match arguments")
+	setFlowCmd.Flags().StringVarP(&file, "file", "f", "", "read flow file to insert the flow entry")
+	setFlowCmd.Flags().StringSliceVarP(&matchKeyList, "match", "m", []string{}, "match key arguments")
 	setFlowCmd.Flags().StringSliceVarP(&actionValues, "action", "a", []string{}, "action arguments")
-	setFlowCmd.Flags().StringVarP(&ttl, "ttl", "t", ttl, "TTL arguments")
+	setFlowCmd.Flags().StringVarP(&ttl, "ttl", "t", "", "TTL arguments")
 }

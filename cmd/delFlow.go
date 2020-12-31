@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	reset          bool
+	clear    bool
 	delEntry []string
 )
 
@@ -40,100 +40,107 @@ var delFlowCmd = &cobra.Command{
 		return argsList, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-
-		if (all || len(delEntry) > 0) && len(args) <= 0 {
-			cmd.Help()
-			return
-		}
-		for a, v := range delEntry {
-			delEntry[a] = strings.Replace(v, " ", "", -1)
-		}
-
-		cliAddr, ctxAddr, conn, cancel, p4Info, _ := initConfigClient()
+		cliAddr, ctxAddr, conn, cancel, _, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
 		cli := *cliAddr
 		ctx := *ctxAddr
 
-		if !reset {
-			argsList, _ := p4Info.GuessTableName(args[0])
-			if len(argsList) != 1 {
-				for _, v := range argsList {
-					strs := strings.Split(v, ".")
-					if strings.EqualFold(strs[2], args[0]) {
-						args[0] = v
-					}
-				}
-			} else {
-				args[0] = argsList[0]
-			}
-		}
-
-		for _, v := range p4Info.Tables {
-			if strings.HasPrefix(v.Name, preFixIg) || strings.HasPrefix(v.Name, preFixEg) {
-				if (all || len(delEntry) > 0) && v.Name != args[0] {
+		if all && !clear && len(args) <= 0 && len(delEntry) <= 0 {
+			for _, tb := range Obj.p4Info.Tables {
+				if NotSupportToReadTable[tb.ID] {
 					continue
 				}
-				stream, err := cli.Read(ctx, genReadRequestWithId(v.ID))
-				if err != nil {
-					log.Fatalf("Got error, %v \n", err.Error())
-					return
+				Obj.table = append(Obj.table, tb)
+			}
+		} else if !all && clear && len(args) > 0 && len(delEntry) <= 0 {
+			for _, tb := range Obj.p4Info.Tables {
+				if NotSupportToReadTable[tb.ID] {
+					continue
 				}
-
-				for {
-					rsp, err := stream.Recv()
-					if err == io.EOF {
-						break
-					}
-					if rsp != nil {
-						if len(rsp.GetEntities()) == 0 {
-							fmt.Printf("%s table is empty\n", v.Name)
-							break
-						}
-						var cnt []int
-						var err error
-
-						if all || reset {
-							cnt, err = DeleteEntries(&rsp, &cli, &ctx)
-							if err != nil {
-								fmt.Printf("Failed to delete entry: table \"%s\" with fields: %s\n", v.Name, rsp.Entities[cnt[0]].GetTableEntry().Key.Fields)
-							} else {
-								fmt.Printf("%d entires of \"%s\" table have cleared\n", len(cnt), v.Name)
-							}
-						} else if len(delEntry) > 0 {
-							table, _ := p4Info.GetTableById(id.TableId(v.ID))
-							collectedMatchTypes, ok := collectTableMatchTypes(table, &delEntry)
-							if !ok {
-								fmt.Println("Match keys are not matched")
-								return
-							}
-							fmt.Print("Make Match Key... ")
-							if match := BuildMatchKeys(&collectedMatchTypes); match != nil {
-								delReq := util.GenWriteRequestWithId(p4.Update_DELETE, id.TableId(v.ID), match, nil)
-								fmt.Print("Write Delete Reqeust... ")
-								_, err := cli.Write(ctx, delReq)
-								if err != nil {
-									fmt.Println(err)
-									return
-								}
-								fmt.Println("DONE.")
-							} else {
-								fmt.Println("Please Check match keys and inputted arguments.")
-							}
-						}
-					}
+				if strings.Contains(tb.Name, args[0]) {
+					Obj.table = append(Obj.table, tb)
 				}
 			}
+		} else if !all && !clear && len(args) > 0 && len(delEntry) > 0 {
+			for a, v := range delEntry {
+				delEntry[a] = strings.TrimSpace(v)
+			}
+			for _, tb := range Obj.p4Info.Tables {
+				if NotSupportToReadTable[tb.ID] {
+					continue
+				}
+				if strings.Contains(tb.Name, args[0]) {
+					Obj.table = append(Obj.table, tb)
+				}
+			}
+			if len(Obj.table) > 1 {
+				fmt.Println(fmt.Errorf("Too many tables matched."))
+				for _, k := range Obj.table {
+					fmt.Printf("Table : %s\n", k.Name)
+				}
+				return
+			}
+			if len(Obj.table) <=0 {
+				fmt.Println(fmt.Errorf("No tables matched.\n"))
+				return
+			}
+
+			collectedMatchTypes, ok := collectTableMatchTypes(&delEntry)
+			if !ok {
+				fmt.Println("Match keys are not matched")
+				return
+			}
+			if match := BuildMatchKeys(&collectedMatchTypes); match != nil {
+				delReq := util.GenWriteRequestWithId(p4.Update_DELETE, id.TableId(Obj.table[0].ID), match, nil)
+				_, err := cli.Write(ctx, delReq)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+			}
+			return
+		} else {
+			fmt.Println(fmt.Errorf("check the flag or args"))
+			cmd.Help()
+			return
 		}
-		if reset {
-			fmt.Println("Reset complete.")
+		for _, tb := range Obj.table {
+			stream, err := cli.Read(ctx, genReadRequestWithId(tb.ID))
+			if err != nil {
+				log.Fatalf("Got error, %v \n", err.Error())
+				return
+			}
+
+			for {
+				rsp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				if rsp != nil {
+					if len(rsp.GetEntities()) == 0 {
+						fmt.Printf("%s table is empty\n", tb.Name)
+						break
+					}
+
+					var cnt []int
+					var err error
+					cnt, err = DeleteEntries(&rsp, &cli, &ctx)
+					if err != nil {
+						fmt.Printf("Failed to delete entry: table \"%s\" with fields: %s\n", tb.Name, rsp.Entities[cnt[0]].GetTableEntry().Key.Fields)
+						return
+					}
+
+					fmt.Printf("%d entires of \"%s\" table have cleared\n", len(cnt), tb.Name)
+				}
+			}
 		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(delFlowCmd)
-	delFlowCmd.Flags().BoolVarP(&all, "all", "a", false, "delete all entries of the table")
-	delFlowCmd.Flags().BoolVarP(&reset, "reset", "r", false, "clear all of the tables")
+	delFlowCmd.Flags().BoolVarP(&all, "all", "a", false, "delete all of the entries")
+	delFlowCmd.Flags().BoolVarP(&clear, "clear", "c", false, "clear the table")
 	delFlowCmd.Flags().StringSliceVarP(&delEntry, "match", "m", []string{}, "delete specific entry by given entry number")
 }

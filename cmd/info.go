@@ -12,7 +12,6 @@ var infoCmd = &cobra.Command{
 	Use:   "info TABLE-NAME",
 	Short: "Show information about table",
 	Long:  `Display the detail of table.`,
-	Args:  cobra.ExactArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		_, _, conn, cancel, p4Info, _ := initConfigClient()
 		defer conn.Close()
@@ -21,126 +20,45 @@ var infoCmd = &cobra.Command{
 		var argsList []string
 		for _, v := range p4Info.Tables {
 			if strings.Contains(v.Name, preFixIg) || strings.Contains(v.Name, preFixEg) {
-				strs := strings.Split(v.Name, ".")
-				if toComplete == "" || strings.Contains(toComplete, "pipe") {
-					argsList = append(argsList, v.Name)
-				} else {
-					argsList = append(argsList, strs[2])
-				}
+				argsList = append(argsList, v.Name)
 			}
 		}
 		return argsList, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-
-		_, _, conn, cancel, p4Info, _ := initConfigClient()
+		_, _, conn, cancel, _, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
 
-		/* non-p4Info not used yet. If you need to see non-p4 object,
-		please open the issue to talk about this.
-		tableList, ok := nonP4Info.GuessTableName(args[0])
-		if !ok {
-			fmt.Printf("Can not found the table %s\n", args[0])
-			return
+		resultTables := make([]bfrt.Table, 0)
+		notFounded := make([]string, 0)
+
+		if len(args) == 0 {
+			resultTables = Obj.p4Info.Tables
 		}
-		*/
-		argsList, _ := p4Info.GuessTableName(args[0])
-		if len(argsList) != 1 {
-			for _, v := range argsList {
-				strs := strings.Split(v, ".")
-				if strings.EqualFold(strs[2], args[0]) {
-					args[0] = v
+
+		for _, name := range args {
+			found := false
+			for _, table := range Obj.p4Info.Tables {
+				if strings.Contains(table.Name, name) {
+					resultTables = append(resultTables, table)
+					found = true
 				}
 			}
-		} else {
-			args[0] = argsList[0]
-		}
-
-		tableId, _ := p4Info.GetTableId(args[0])
-		if uint32(tableId) == bfrt.ID_NOT_FOUND {
-			fmt.Printf("Can't found table with name: %s\n", args[0])
-			return
-		}
-
-		table, _ := p4Info.GetTableById(tableId)
-		if table == nil {
-			fmt.Printf("Can not found table with Id %d\n", tableId)
-			return
-		}
-
-		fmt.Println("--------------------------------------------------------------------------------")
-		fmt.Println("Table Info")
-		if table.Name != "" {
-			fmt.Printf("  %-12s: %-6s\n", "Name", table.Name)
-		}
-		if table.ID != 0 {
-			fmt.Printf("  %-12s: %-6d\n", "ID", table.ID)
-		}
-		if table.TableType != "" {
-			fmt.Printf("  %-12s: %-6s\n", "Type", table.TableType)
-		}
-		if table.Size != 0 {
-			fmt.Printf("  %-12s: %-6d\n", "Size", table.Size)
-		}
-		if table.Annotations != nil {
-			fmt.Printf("  %-12s:\n", "Annotations")
-			for k, v := range table.Annotations {
-				if v.Value != "" {
-					fmt.Printf("  %d - Name: %s | Value: %s \n", k+1, v.Name, v.Value)
-				} else {
-					fmt.Printf("    %d - Name: %s \n", k+1, v.Name)
-				}
-			}
-		}
-		if table.DependsOn != nil {
-			fmt.Printf("%-12s: %-6s\n", "Table DependsOn", table.DependsOn)
-		}
-
-		if table.Key != nil {
-			fmt.Println("--------------------------------------------------------------------------------")
-			fmt.Printf("%-s\n", "Match Key Info")
-			fmt.Printf("  %-8s %-20s %-11s %-10s %-9s %-8s %-4s",
-				"KeyId", "Name", "Match_type", "Mandatory", "Repeated", "Type", "Width\n")
-			for _, v := range table.Key {
-				if v.Name == "$MATCH_PRIORITY" {
-					fmt.Printf("  %-8d %-20s %-11s %-10t %-9t %-8s %-4d\n",
-						v.ID, v.Name, v.MatchType, v.Mandatory, v.Repeated, v.Type.Type, 32)
-				} else {
-					fmt.Printf("  %-8d %-20s %-11s %-10t %-9t %-8s %-4d\n",
-						v.ID, v.Name, v.MatchType, v.Mandatory, v.Repeated, v.Type.Type, v.Type.Width)
-				}
+			if !found {
+				notFounded = append(notFounded, name)
 			}
 		}
 
-		if table.Data != nil {
-			fmt.Println("--------------------------------------------------------------------------------")
-			fmt.Printf("%-s\n", "Table Data Info")
-			fmt.Printf("  %-8s %-20s %-10s %-9s %-8s\n",
-				"KeyId", "Name", "Mandatory", "Repeated", "Type")
-			for _, v := range table.Data {
-				fmt.Printf("  %-8d %-20s %-10t %-9t %-8s\n",
-					v.Singleton.ID, v.Singleton.Name, v.Mandatory, v.Singleton.Repeated, v.Singleton.Type.Type)
+		for _, v := range resultTables {
+			if NotSupportToReadTable[v.ID] {
+				continue
 			}
+			InfoEntries(v)
 		}
 
-		if table.ActionSpecs != nil {
-			fmt.Println("--------------------------------------------------------------------------------")
-			fmt.Printf("%-s\n", "Action Info")
-			for _, v := range table.ActionSpecs {
-				fmt.Printf("  ID: %-6d, Name: %-20s \n", v.ID, v.Name)
-				if v.Data != nil {
-					fmt.Println("    ----------------------------------------------------------------")
-					for _, d := range v.Data {
-						fmt.Printf("    %-6s %-20s %-10s %-9s %-8s %-4s\n",
-							"ID", "Name", "Mandatory", "Repeated", "Type", "Width")
-						fmt.Printf("    %-6d %-20s %-10t %-9t %-8s %-4d\n",
-							d.ID, d.Name, d.Mandatory, d.Repeated, d.Type.Type, d.Type.Width)
-					}
-					fmt.Println("    ----------------------------------------------------------------")
-				}
-			}
-			fmt.Println("--------------------------------------------------------------------------------")
+		for _, v := range notFounded {
+			fmt.Println(fmt.Errorf("Couldn't found %s table", v))
 		}
 	},
 }

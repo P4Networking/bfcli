@@ -4,17 +4,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"encoding/hex"
 	"fmt"
 	"github.com/P4Networking/pisc/southbound/bfrt"
 	"github.com/P4Networking/pisc/util"
 	"github.com/P4Networking/pisc/util/enums"
 	"github.com/P4Networking/pisc/util/enums/id"
 	"github.com/P4Networking/proto/go/p4"
+	"github.com/olekukonko/tablewriter"
 	"google.golang.org/grpc"
 	"io"
 	"log"
 	"math"
 	"net"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -60,18 +63,49 @@ type ActionSet struct {
 	parsedBitWidth int
 }
 
+// Struct Embedding gives the capability to expand its own new method with an existing type.
+type BfRtInfo struct {
+	bfrt.BfRtInfo
+}
+
+type EtnryObj struct {
+
+	p4Info      BfRtInfo
+	nonP4Info   BfRtInfo
+
+	table []bfrt.Table
+
+	actions map[uint32] string
+	actionName string
+	actionId uint32
+}
+
 var (
+	preFixIg = "pipe.SwitchIngress"
+	preFixEg = "pipe.SwitchEgress"
+	preFixIgPar = "pipe.SwitchIngressParser"
+	preFixEgPar = "pipe.SwitchEgressParser"
 	DEFAULT_ADDR = ":50000"
 
-	p4Info      bfrt.BfRtInfo
-	nonP4Info   bfrt.BfRtInfo
-	preFixIg    = "pipe.SwitchIngress."
-	preFixEg    = "pipe.SwitchEgress."
-	preFixIgPar = "pipe.SwitchIngressParser."
-	preFixEgPar = "pipe.SwitchEgressParser."
+	// true : not support to read; false : support to read
+	NotSupportToReadTable = map[uint32] bool {
+		2432705822 : true, // "pipe.$SNAPSHOT_EGRESS"
+		2449483038 : true, // "pipe.$SNAPSHOT_EGRESS_LIVENESS"
+		2432703071 : true, // "pipe.$SNAPSHOT_INGRESS"
+		2449480287 : true, // "pipe.$SNAPSHOT_INGRESS_LIVENESS"
+		2415950168 : true} // "pipe.SwitchIngressParser.$PORT_METADATA"
+
+	Obj          EtnryObj
 )
 
-func initConfigClient() (*p4.BfRuntimeClient, *context.Context, *grpc.ClientConn, context.CancelFunc, *bfrt.BfRtInfo, *bfrt.BfRtInfo) {
+func ObjInit() {
+	Obj.actionId = 0
+	Obj.actionName = ""
+	Obj.table = []bfrt.Table{}
+	Obj.actions = make(map[uint32]string, 0)
+}
+
+func initConfigClient() (*p4.BfRuntimeClient, *context.Context, *grpc.ClientConn, context.CancelFunc, *BfRtInfo, *BfRtInfo) {
 	if server == "" {
 		server = DEFAULT_ADDR
 	}
@@ -89,38 +123,33 @@ func initConfigClient() (*p4.BfRuntimeClient, *context.Context, *grpc.ClientConn
 		log.Fatalf("Error with %v", err)
 	}
 
-	err = gob.NewDecoder(bytes.NewReader(rsp.Config[0].BfruntimeInfo)).Decode(&p4Info)
+	err = gob.NewDecoder(bytes.NewReader(rsp.Config[0].BfruntimeInfo)).Decode(&Obj.p4Info)
 	if err != nil {
 		log.Fatal("decode error 1:", err)
 	}
 
-	err = gob.NewDecoder(bytes.NewReader(rsp.NonP4Config.BfruntimeInfo)).Decode(&nonP4Info)
+	err = gob.NewDecoder(bytes.NewReader(rsp.NonP4Config.BfruntimeInfo)).Decode(&Obj.nonP4Info)
 	if err != nil {
 		log.Fatal("decode error 2:", err)
 	}
-	return &cli, &ctx, conn, cancel, &p4Info, &nonP4Info
+	return &cli, &ctx, conn, cancel, &Obj.p4Info, &Obj.nonP4Info
 }
 
-func printNameById(actionName string, id uint32) (string, bool) {
+func PrintNameById(actionName string, id uint32) (string, bool) {
 	var name string
 	var ok bool
 
-	name, ok = p4Info.GetActionNameById(id)
+	name, ok = Obj.p4Info.GetActionNameById(id)
 	if ok == true {
 		return name, true
 	}
 
-	name, ok = p4Info.GetDataNameById(id)
+	name, ok = Obj.p4Info.GetDataNameById(id)
 	if ok == true {
 		return name, true
 	}
 
-	name, ok = p4Info.GetActionParameterNameById(actionName, id)
-	if ok == true {
-		return name, true
-	}
-
-	name, ok = p4Info.GetDataNameById(id)
+	name, ok = Obj.p4Info.GetActionParameterNameById(actionName, id)
 	if ok == true {
 		return name, true
 	}
@@ -130,9 +159,10 @@ func printNameById(actionName string, id uint32) (string, bool) {
 
 // collectTableMatchTypes function collects the match key's type and bit width.
 // the collected type and bit width determine what kind of the input should be used.
-func collectTableMatchTypes(table *bfrt.Table, matchKey *[]string) ([]MatchSet, bool) {
+func collectTableMatchTypes(matchKey *[]string) ([]MatchSet, bool) {
+	table := Obj.table[0]
 	if len(table.Key) != len(*matchKey) {
-		fmt.Printf("Length of Match keys [%d] != Length of match args [%d]\n", len(table.Key), len(matchLists))
+		fmt.Printf("expected match key length : %d,  received match key length : %d\n", len(table.Key), len(*matchKey))
 		return nil, false
 	}
 
@@ -353,94 +383,163 @@ ERROR:
 	return nil
 }
 
-func DumpEntriesCount(stream *p4.BfRuntime_ReadClient, p4table *bfrt.Table) {
-	for {
-		rsp, err := (*stream).Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Fatalf("Got error: %v", err)
-		}
-		Entities := rsp.GetEntities()
-		cnt := 0
-		if len(Entities) == 0 {
-			fmt.Printf("The \"%s\" table is empty\n", p4table.Name)
-		} else {
-			for _, v := range Entities {
-				if v.GetTableEntry().IsDefaultEntry{
-					continue
-				}
-				cnt++
+func InfoEntries(table bfrt.Table) {
+
+	result := fmt.Sprintln("--------------------------------------------------------------------------------")
+	result += "Table Info\n"
+	if table.Name != "" {
+		result += fmt.Sprintf("  %-12s: %-6s\n", "Name", table.Name)
+	}
+	if table.ID != 0 {
+		result += fmt.Sprintf("  %-12s: %-6d\n", "ID", table.ID)
+	}
+	if table.TableType != "" {
+		result += fmt.Sprintf("  %-12s: %-6s\n", "Type", table.TableType)
+	}
+	if table.Size != 0 {
+		result += fmt.Sprintf("  %-12s: %-6d\n", "Size", table.Size)
+	}
+	if table.Annotations != nil {
+		result += fmt.Sprintf("  %-12s:\n", "Annotations")
+		for k, v := range table.Annotations {
+			if v.Value != "" {
+				result += fmt.Sprintf("  %d - Name: %s | Value: %s \n", k+1, v.Name, v.Value)
+			} else {
+				result += fmt.Sprintf("    %d - Name: %s \n", k+1, v.Name)
 			}
-			fmt.Printf("Table \"%s\" has %d entries.\n", p4table.Name, cnt)
 		}
 	}
+	if table.DependsOn != nil {
+		result += fmt.Sprintf("%-12s: %-6s\n", "Table DependsOn", table.DependsOn)
+	}
+
+	if table.Key != nil {
+		result += fmt.Sprintln("--------------------------------------------------------------------------------")
+		result += fmt.Sprintf("%-s\n", "Match Key Info")
+		result += fmt.Sprintf("  %-8s %-20s %-11s %-10s %-9s %-8s %-4s",
+			"KeyId", "Name", "Match_type", "Mandatory", "Repeated", "Type", "Width\n")
+		for _, v := range table.Key {
+			if v.Name == "$MATCH_PRIORITY" {
+				result += fmt.Sprintf("  %-8d %-20s %-11s %-10t %-9t %-8s %-4d\n",
+					v.ID, v.Name, v.MatchType, v.Mandatory, v.Repeated, v.Type.Type, 32)
+			} else {
+				result += fmt.Sprintf("  %-8d %-20s %-11s %-10t %-9t %-8s %-4d\n",
+					v.ID, v.Name, v.MatchType, v.Mandatory, v.Repeated, v.Type.Type, v.Type.Width)
+			}
+		}
+	}
+
+	if table.Data != nil {
+		result += fmt.Sprintln("--------------------------------------------------------------------------------")
+		result += fmt.Sprintf("%-s\n", "Table Data Info")
+		result += fmt.Sprintf("  %-8s %-20s %-10s %-9s %-8s\n",
+			"KeyId", "Name", "Mandatory", "Repeated", "Type")
+		for _, v := range table.Data {
+			result += fmt.Sprintf("  %-8d %-20s %-10t %-9t %-8s\n",
+				v.Singleton.ID, v.Singleton.Name, v.Mandatory, v.Singleton.Repeated, v.Singleton.Type.Type)
+		}
+	}
+
+	if table.ActionSpecs != nil {
+		result += fmt.Sprintln("--------------------------------------------------------------------------------")
+		result += fmt.Sprintf("%-s\n", "Action Info")
+		for _, v := range table.ActionSpecs {
+			result += fmt.Sprintf("  ID: %-6d, Name: %-20s \n", v.ID, v.Name)
+			if v.Data != nil {
+				result += fmt.Sprintln("    ----------------------------------------------------------------")
+				for _, d := range v.Data {
+					result += fmt.Sprintf("    %-6s %-20s %-10s %-9s %-8s %-4s\n",
+						"ID", "Name", "Mandatory", "Repeated", "Type", "Width")
+					result += fmt.Sprintf("    %-6d %-20s %-10t %-9t %-8s %-4d\n",
+						d.ID, d.Name, d.Mandatory, d.Repeated, d.Type.Type, d.Type.Width)
+				}
+				result += fmt.Sprintln("    ----------------------------------------------------------------")
+			}
+		}
+		result += fmt.Sprintln("--------------------------------------------------------------------------------")
+	}
+	fmt.Print(result)
 }
 
-// DumpEntries function reads entries from ReadRequest response, and the function print all of the entries.
-// The function will terminate when the stream occurs an error and the response entities count has zeros.
+// DumpEntries function reads the entries from PISC via ReadRequest.
 func DumpEntries(stream *p4.BfRuntime_ReadClient, p4table *bfrt.Table) {
 	for {
+		mkWrt := tablewriter.NewWriter(os.Stdout)
+		mkWrt.SetAlignment(tablewriter.ALIGN_CENTER)
+
+		adWrt:= tablewriter.NewWriter(os.Stdout)
+		adWrt.SetAlignment(tablewriter.ALIGN_CENTER)
+
 		rsp, err := (*stream).Recv()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			log.Fatalf("Got error: %v", err)
+			return
 		}
 		Entities := rsp.GetEntities()
 		if len(Entities) == 0 {
 			fmt.Printf("The \"%s\" table is empty\n", p4table.Name)
+			return
 		} else {
-			fmt.Println("--------------------------------------------------------------------------------")
-			fmt.Printf("Table Name : %-s\n", p4table.Name)
-			for kv, v := range Entities {
-				tbl := v.GetTableEntry()
-				if !tbl.IsDefaultEntry {
-					fmt.Printf("Entry %d:\n", kv)
-				}
-				fmt.Println("Match Key Info")
-				if tbl.GetKey() != nil {
-					fmt.Printf("  %-20s %-10s %-16s\n", "Field Name:", "Type:", "Value:")
-					for kf, f := range tbl.Key.Fields {
-						switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
-						case "KeyField_Exact_":
-							m := f.GetExact()
-							fmt.Printf("  %-20s %-10s %-16x\n", p4table.Key[kf].Name, "Exact", m.Value)
-						case "KeyField_Ternary_":
-							t := f.GetTernary()
-							fmt.Printf("  %-20s %-10s %-16x Mask: %-12x\n", p4table.Key[kf].Name, "Ternay", t.Value, t.Mask)
-						case "KeyField_Lpm":
-							l := f.GetLpm()
-							fmt.Printf("  %-20s %-10s %-16x PreFix: %-12d\n", p4table.Key[kf].Name, "LPM", l.Value, l.PrefixLen)
-						case "KeyField_Range_":
-							//TODO: Implement range match
-							//r := f.GetRange()
-							//fmt.Printf("  %-20s %-10s High: %-8x Low: %-8x\n", p4table.Key[k].Name, "LPM", r.High, r.Low)
+			if count {
+				fmt.Printf("Table \"%s\" has %d entries\n", p4table.Name, len(Entities))
+			} else {
+				str := "--------------------------------------------------------------------------------\n"
+				str += fmt.Sprintf("Table Name : %s", p4table.Name)
+				fmt.Println(str)
+				mkWrt.SetHeader([]string{"Field Name", "Type", "Value", "Mask/PreFix"})
+				for kv, v := range Entities {
+					tbl := v.GetTableEntry()
+					fmt.Println(fmt.Sprintf("\nEntry : %d\nMatch Key Info", kv))
+					// Match Keys
+					if tbl.GetKey() != nil {
+						iter := 0
+						for k, mk := range p4table.Key {
+							f := tbl.Key.Fields[iter]
+							if mk.ID == f.FieldId {
+								switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
+								case "KeyField_Exact_":
+									m := f.GetExact()
+									mkWrt.Append([]string{p4table.Key[k].Name, "Exact", hex.EncodeToString(m.Value), "None"})
+								case "KeyField_Ternary_":
+									t := f.GetTernary()
+									mkWrt.Append([]string{p4table.Key[k].Name, "Ternary", hex.EncodeToString(t.Value), hex.EncodeToString(t.Mask)})
+								case "KeyField_Lpm":
+									l := f.GetLpm()
+									mkWrt.Append([]string{p4table.Key[k].Name, "LPM", string(l.Value), string(l.PrefixLen)})
+								//	TODO : Range match field
+								//case "KeyField_Range_":
+									//	//r := f.GetRange()
+									//	//fmt.Printf("  %-20s %-10s High: %-8x Low: %-8x\n", p4table.Key[k].Name, "LPM", r.High, r.Low)
+								}
+								iter++
+							} else {
+								mkWrt.Append([]string{p4table.Key[k].Name, "None", "None", "None"})
+							}
 						}
+						mkWrt.Render()
+						mkWrt.ClearRows()
 					}
-				}
 
-				if tbl.IsDefaultEntry {
-					fmt.Printf("Table default action:\n")
-				}
-				actionName, _ := p4Info.GetActionNameById(tbl.Data.ActionId)
-				fmt.Println("Action:", actionName)
-				if tbl.Data.Fields != nil {
-					fmt.Printf("  %-20s %-16s\n", "Field Name:", "Value:")
-					for _, datafield := range tbl.Data.Fields {
-						an, err := printNameById(actionName, datafield.FieldId)
-						if err {
-							fmt.Printf("  %-20s %-16x\n", an, datafield.GetStream())
+					// Action Field
+					actionName, _ := Obj.p4Info.GetActionNameById(tbl.Data.ActionId)
+					fmt.Println("Action:", actionName)
+					if tbl.Data.Fields != nil {
+						adWrt.SetHeader([]string{"Field Name", "Value"})
+						for _, datafield := range tbl.Data.Fields {
+							an, ok := PrintNameById(actionName, datafield.FieldId)
+							if ok {
+								adWrt.Append([]string{an, hex.EncodeToString(datafield.GetStream())})
+							}
 						}
+						adWrt.Render()
+						adWrt.ClearRows()
 					}
 				}
-				if kv+1 != len(Entities) {
-					fmt.Printf("------------------\n")
-				}
+				fmt.Println("--------------------------------------------------------------------------------")
 			}
-			fmt.Println("--------------------------------------------------------------------------------")
 		}
 	}
 }
@@ -468,9 +567,6 @@ func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.
 	var delReq *p4.WriteRequest = nil
 	for k, e := range (*rsp).Entities {
 		tbl := e.GetTableEntry()
-		if tbl.IsDefaultEntry {
-			continue
-		}
 		if delReq == nil {
 			delReq = util.GenWriteRequestWithId(p4.Update_DELETE, id.TableId(tbl.TableId), tbl.Key.Fields, nil)
 		} else {
@@ -493,7 +589,7 @@ func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.
 	}
 	_, err := (*cli).Write(*ctx, delReq)
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 	return result, nil
 }
