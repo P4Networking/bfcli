@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"github.com/P4Networking/pisc/util"
 	"github.com/P4Networking/pisc/util/enums/id"
 	"github.com/P4Networking/proto/go/p4"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"log"
 	"os"
@@ -19,7 +21,8 @@ var (
 	actionValues	[]string
 	ttl				= ""
 	file			string
-
+	cliAddr 		*p4.BfRuntimeClient
+	ctxAddr			*context.Context
 	filedata [][]string
 )
 
@@ -63,6 +66,9 @@ var setFlowCmd = &cobra.Command{
 			}()
 			s := bufio.NewScanner(f)
 			for s.Scan() {
+				if s.Text() == "" {
+					continue
+				}
 				filedata = append(filedata, strings.Split(strings.ReplaceAll(s.Text(), ", ", ","), " "))
 			}
 			err = s.Err()
@@ -72,14 +78,24 @@ var setFlowCmd = &cobra.Command{
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
+		cli, ctx, conn, cancel, _, _ := initConfigClient()
+		cliAddr = cli
+		ctxAddr = ctx
+		defer conn.Close()
+		defer cancel()
 		if cmd.Flag("file").Changed {
 			setFlowSub.Flags().StringSliceVarP(&matchKeyList, "match", "m", []string{}, "match key arguments")
 			setFlowSub.Flags().StringSliceVarP(&actionValues, "action", "a", []string{}, "action arguments")
 			setFlowSub.Flags().StringVarP(&ttl, "ttl", "t", "", "TTL arguments")
+			cnt := 0
+			bar := progressbar.Default(int64(len(filedata)))
 			for _, line := range filedata {
+				if line[0] == "" {
+					continue
+				}
 				err := setFlowSub.ParseFlags(line)
 				matchKeyList = strings.Split(matchKeyList[0], ",")
-				if actionValues[0] == ""{
+				if len(actionValues) < 1 || actionValues[0] == "" {
 					actionValues = nil
 				} else {
 					actionValues = strings.Split(actionValues[0], ",")
@@ -91,12 +107,16 @@ var setFlowCmd = &cobra.Command{
 				matchKeyList = nil
 				actionValues = nil
 				ttl = ""
+				cnt++
+				_ = bar.Add(1)
 			}
+			fmt.Printf("Have successfully wrote %d entries.\n", cnt)
 		} else {
 			setFlowSub.Flags().StringSliceVarP(&matchKeyList, "match", "m", matchKeyList, "match key arguments")
 			setFlowSub.Flags().StringSliceVarP(&actionValues, "action", "a", actionValues, "action arguments")
 			setFlowSub.Flags().StringVarP(&ttl, "ttl", "t", ttl, "TTL arguments")
-			setFlowSub.Run(cmd,args)
+			setFlowSub.Run(cmd, args)
+			fmt.Println("Write done.")
 		}
 	},
 }
@@ -104,11 +124,6 @@ var setFlowCmd = &cobra.Command{
 var setFlowSub = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ObjInit()
-		cliAddr, ctxAddr, conn, cancel, _, _ := initConfigClient()
-		defer conn.Close()
-		defer cancel()
-		cli := *cliAddr
-		ctx := *ctxAddr
 		for a, v := range matchKeyList {
 			matchKeyList[a] = strings.TrimSpace(v)
 		}
@@ -133,7 +148,6 @@ var setFlowSub = &cobra.Command{
 			return
 		}
 
-		//Obj.actions = make(map[uint32]string, 0)
 		for _, table := range Obj.table {
 			for _, actionSpec := range table.ActionSpecs {
 				if strings.Contains(actionSpec.Name, args[1]) {
@@ -208,14 +222,11 @@ var setFlowSub = &cobra.Command{
 			action = append(action, util.GenDataField(ttlId, util.Int32ToBytes(uint32(l))))
 		}
 
-		//fmt.Printf("   Make Write Request...\n")
 		var req = util.GenWriteRequestWithId(p4.Update_INSERT, id.TableId(Obj.table[0].ID), match, &p4.TableData{ActionId: Obj.actionId, Fields: action})
-		if _, err := cli.Write(ctx, req); err != nil {
+		if _, err := (*cliAddr).Write(*ctxAddr, req); err != nil {
 			log.Printf("Got an error, %v \n", err.Error())
 			return
 		}
-
-		fmt.Printf("Write Done.\n")
 	},
 }
 

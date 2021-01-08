@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/gob"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/P4Networking/pisc/southbound/bfrt"
 	"github.com/P4Networking/pisc/util"
@@ -12,6 +13,7 @@ import (
 	"github.com/P4Networking/pisc/util/enums/id"
 	"github.com/P4Networking/proto/go/p4"
 	"github.com/olekukonko/tablewriter"
+	"github.com/schollz/progressbar/v3"
 	"google.golang.org/grpc"
 	"io"
 	"log"
@@ -562,34 +564,53 @@ func genEntity(tableId uint32) *p4.Entity {
 }
 
 // DeleteEntries function read entries from the response to delete all entries of a table
-func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.Context) ([]int, error) {
-	var result []int
+func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.Context, matchKey []string) ([]int, error) {
+	var result  = make([]int, 0)
+	var pbcount = 0
 	var delReq *p4.WriteRequest = nil
+
+	if matchKey == nil {
+		pbcount = len((*rsp).Entities)
+	} else {
+		pbcount = 1
+	}
+	bar := progressbar.Default(int64(pbcount))
+
 	for k, e := range (*rsp).Entities {
 		tbl := e.GetTableEntry()
-		if delReq == nil {
-			delReq = util.GenWriteRequestWithId(p4.Update_DELETE, id.TableId(tbl.TableId), tbl.Key.Fields, nil)
+		found := false
+		delReq = nil
+		if matchKey != nil {
+			collectedMatchTypes, ok := collectTableMatchTypes(&matchKey)
+			if !ok {
+				fmt.Println("Match key argument are not matched")
+				return nil, errors.New("argument err")
+			}
+			match := BuildMatchKeys(&collectedMatchTypes)
+			if match == nil {
+				// the nil of the match variable is mean that the BuildMatchKeys function can't make the match key with the input argument.
+				return nil, nil
+			}
+			for kf, kv := range match {
+				// TODO: may be can find a better way to compare the match key.
+				if tbl.Key.Fields[kf].String() == kv.String() {
+					found = true
+					break
+				}
+			}
 		} else {
-			delReq.Updates = append(delReq.Updates, &p4.Update{
-				Type: p4.Update_DELETE,
-				Entity: &p4.Entity{
-					Entity: &p4.Entity_TableEntry{
-						TableEntry: &p4.TableEntry{
-							TableId: tbl.TableId,
-							Key: &p4.TableKey{
-								Fields: tbl.Key.Fields,
-							},
-							Data: nil,
-						},
-					},
-				},
-			})
+			found = true
 		}
-		result = append(result, k)
-	}
-	_, err := (*cli).Write(*ctx, delReq)
-	if err != nil {
-		return nil, err
+		if found {
+			result = append(result, k)
+			delReq = util.GenWriteRequestWithId(p4.Update_DELETE, id.TableId(tbl.TableId), tbl.Key.Fields, tbl.Data)
+			_ = bar.Add(1)
+
+			_, err := (*cli).Write(*ctx, delReq)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	return result, nil
 }

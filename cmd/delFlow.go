@@ -2,9 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/P4Networking/pisc/util"
-	"github.com/P4Networking/pisc/util/enums/id"
-	"github.com/P4Networking/proto/go/p4"
 	"github.com/spf13/cobra"
 	"io"
 	"log"
@@ -46,14 +43,16 @@ var delFlowCmd = &cobra.Command{
 		cli := *cliAddr
 		ctx := *ctxAddr
 
-		if all && !clear && len(args) <= 0 && len(delEntry) <= 0 {
+		if all && !clear && len(args) <= 0 && !cmd.Flag("match").Changed {
+			// flag "-a" Clear all tables
 			for _, tb := range Obj.p4Info.Tables {
 				if NotSupportToReadTable[tb.ID] {
 					continue
 				}
 				Obj.table = append(Obj.table, tb)
 			}
-		} else if !all && clear && len(args) > 0 && len(delEntry) <= 0 {
+		} else if !all && clear && len(args) > 0 && !cmd.Flag("match").Changed {
+			// flag "-c" Clear a table
 			for _, tb := range Obj.p4Info.Tables {
 				if NotSupportToReadTable[tb.ID] {
 					continue
@@ -62,10 +61,11 @@ var delFlowCmd = &cobra.Command{
 					Obj.table = append(Obj.table, tb)
 				}
 			}
-		} else if !all && !clear && len(args) > 0 && len(delEntry) > 0 {
+		} else if !all && !clear && len(args) > 0 && cmd.Flag("match").Changed {
 			for a, v := range delEntry {
 				delEntry[a] = strings.TrimSpace(v)
 			}
+
 			for _, tb := range Obj.p4Info.Tables {
 				if NotSupportToReadTable[tb.ID] {
 					continue
@@ -74,6 +74,7 @@ var delFlowCmd = &cobra.Command{
 					Obj.table = append(Obj.table, tb)
 				}
 			}
+
 			if len(Obj.table) > 1 {
 				fmt.Println(fmt.Errorf("Too many tables matched."))
 				for _, k := range Obj.table {
@@ -85,26 +86,12 @@ var delFlowCmd = &cobra.Command{
 				fmt.Println(fmt.Errorf("No tables matched.\n"))
 				return
 			}
-
-			collectedMatchTypes, ok := collectTableMatchTypes(&delEntry)
-			if !ok {
-				fmt.Println("Match keys are not matched")
-				return
-			}
-			if match := BuildMatchKeys(&collectedMatchTypes); match != nil {
-				delReq := util.GenWriteRequestWithId(p4.Update_DELETE, id.TableId(Obj.table[0].ID), match, nil)
-				_, err := cli.Write(ctx, delReq)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-			}
-			return
 		} else {
 			fmt.Println(fmt.Errorf("check the flag or args"))
 			cmd.Help()
 			return
 		}
+
 		for _, tb := range Obj.table {
 			stream, err := cli.Read(ctx, genReadRequestWithId(tb.ID))
 			if err != nil {
@@ -125,12 +112,16 @@ var delFlowCmd = &cobra.Command{
 
 					var cnt []int
 					var err error
-					cnt, err = DeleteEntries(&rsp, &cli, &ctx)
+					if cmd.Flag("match").Changed {
+						cnt, err = DeleteEntries(&rsp, &cli, &ctx, delEntry)
+					} else {
+						cnt, err = DeleteEntries(&rsp, &cli, &ctx, nil)
+					}
 					if err != nil {
-						fmt.Printf("Failed to delete entry: table \"%s\" with fields: %s\n", tb.Name, rsp.Entities[cnt[0]].GetTableEntry().Key.Fields)
+						fmt.Printf("Failed to delete entry: table \"%s\" with fields: %s\n", tb.Name, delEntry)
+						fmt.Println(err.Error())
 						return
 					}
-
 					fmt.Printf("%d entires of \"%s\" table have cleared\n", len(cnt), tb.Name)
 				}
 			}
@@ -140,7 +131,7 @@ var delFlowCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(delFlowCmd)
-	delFlowCmd.Flags().BoolVarP(&all, "all", "a", false, "delete all of the entries")
-	delFlowCmd.Flags().BoolVarP(&clear, "clear", "c", false, "clear the table")
-	delFlowCmd.Flags().StringSliceVarP(&delEntry, "match", "m", []string{}, "delete specific entry by given entry number")
+	delFlowCmd.Flags().BoolVarP(&all, "all", "a", false, "Clear all the table")
+	delFlowCmd.Flags().BoolVarP(&clear, "clear", "c", false, "Clear a table")
+	delFlowCmd.Flags().StringSliceVarP(&delEntry, "match", "m", []string{}, "Delete entry by given match key")
 }
