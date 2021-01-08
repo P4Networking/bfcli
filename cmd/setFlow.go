@@ -36,18 +36,33 @@ var setFlowCmd = &cobra.Command{
 		_, _, conn, cancel, _, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
-		table, _ := Obj.p4Info.GuessTableName(toComplete)
-		for k, v := range table {
-			if strings.Contains(v, preFixIgPar) || strings.Contains(v, preFixEgPar) {
-				table[k] = table[len(table)-1] // Copy last element to index i.
-				table[len(table)-1] = ""   // Erase last element (write zero value).
-				table = table[:len(table)-1]
+
+		ret := make([]string, 0)
+		if len(args) < 1 {
+			argsList, _ := Obj.p4Info.GuessTableName(toComplete)
+			for _, v := range argsList {
+				if strings.Contains(v, preFixIg) || strings.Contains(v, preFixEg) {
+					name := strings.Split(v, ".")
+					ret = append(ret, name[len(name)-2] + "." +  name[len(name)-1])
+				}
+			}
+			return ret, cobra.ShellCompDirectiveNoFileComp
+		} else if len(args) == 1 {
+			for _, v := range Obj.p4Info.Tables {
+				//ret  := make([]string, 0)
+				if strings.Contains(v.Name, args[0]) {
+					for _, action := range v.ActionSpecs {
+						name := strings.Split(action.Name, ".")
+						ret = append(ret, name[len(name)-2] + "." + name[len(name)-1])
+					}
+					return ret, cobra.ShellCompDirectiveNoFileComp
+				}
 			}
 		}
-		return table, cobra.ShellCompDirectiveNoFileComp
+
+		return nil, cobra.ShellCompDirectiveNoFileComp
 	},
 	PreRun: func(cmd *cobra.Command, args []string) {
-
 		if cmd.Flag("file").Changed && (cmd.Flag("match").Changed || cmd.Flag("action").Changed || cmd.Flag("ttl").Changed) {
 			fmt.Println(fmt.Errorf("file flag can only exist alone."))
 			os.Exit(1)
@@ -116,7 +131,6 @@ var setFlowCmd = &cobra.Command{
 			setFlowSub.Flags().StringSliceVarP(&actionValues, "action", "a", actionValues, "action arguments")
 			setFlowSub.Flags().StringVarP(&ttl, "ttl", "t", ttl, "TTL arguments")
 			setFlowSub.Run(cmd, args)
-			fmt.Println("Write done.")
 		}
 	},
 }

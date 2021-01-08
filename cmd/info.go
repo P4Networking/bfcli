@@ -12,18 +12,25 @@ var infoCmd = &cobra.Command{
 	Use:   "info TABLE-NAME",
 	Short: "Show information about table",
 	Long:  `Display the detail of table.`,
+	Args:  cobra.MaximumNArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		_, _, conn, cancel, p4Info, _ := initConfigClient()
+		_, _, conn, cancel, _, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
 
-		var argsList []string
-		for _, v := range p4Info.Tables {
-			if strings.Contains(v.Name, preFixIg) || strings.Contains(v.Name, preFixEg) {
-				argsList = append(argsList, v.Name)
+		ret := make([]string, 0)
+		if len(args) < 1 {
+			argsList, _ := Obj.p4Info.GuessTableName(toComplete)
+			for _, v := range argsList {
+				if strings.Contains(v, preFixIg) || strings.Contains(v, preFixEg) {
+					name := strings.Split(v, ".")
+					ret = append(ret, name[len(name)-2]+"."+name[len(name)-1])
+				}
 			}
+			return ret, cobra.ShellCompDirectiveNoFileComp
 		}
-		return argsList, cobra.ShellCompDirectiveNoFileComp
+
+		return nil, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		_, _, conn, cancel, _, _ := initConfigClient()

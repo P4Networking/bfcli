@@ -83,10 +83,10 @@ type EtnryObj struct {
 }
 
 var (
-	preFixIg = "pipe.SwitchIngress"
-	preFixEg = "pipe.SwitchEgress"
-	preFixIgPar = "pipe.SwitchIngressParser"
-	preFixEgPar = "pipe.SwitchEgressParser"
+	preFixIg = "pipe.SwitchIngress."
+	preFixEg = "pipe.SwitchEgress."
+	preFixIgPar = "pipe.SwitchIngressParser."
+	preFixEgPar = "pipe.SwitchEgressParser."
 	DEFAULT_ADDR = ":50000"
 
 	// true : not support to read; false : support to read
