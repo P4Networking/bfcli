@@ -89,14 +89,31 @@ var (
 	preFixEgPar = "pipe.SwitchEgressParser."
 	DEFAULT_ADDR = ":50000"
 
-	// true : not support to read; false : support to read
-	NotSupportToReadTable = map[uint32] bool {
-		2432705822 : true, // "pipe.$SNAPSHOT_EGRESS"
-		2449483038 : true, // "pipe.$SNAPSHOT_EGRESS_LIVENESS"
-		2432703071 : true, // "pipe.$SNAPSHOT_INGRESS"
-		2449480287 : true, // "pipe.$SNAPSHOT_INGRESS_LIVENESS"
-		2415950168 : true} // "pipe.SwitchIngressParser.$PORT_METADATA"
-
+	NotSupportToReadTable = map[uint32] bool{
+		//Support
+		4278321156: false,// "$pre.lag"
+		4278321153: false,// "$pre.mgid"
+		4278321154: false,// "$pre.node"
+		4278321157: false,// "$pre.prune"
+		4278255617: false,// "$PORT"
+		//Not support
+		4278321158: true,// "$pre.port"
+		4278452225: true,// "$mirror.cfg"
+		4278321155: true,// "$pre.ecmp"
+		2432705822: true, // "pipe.$SNAPSHOT_EGRESS"
+		2449483038: true, // "pipe.$SNAPSHOT_EGRESS_LIVENESS"
+		2432703071: true, // "pipe.$SNAPSHOT_INGRESS"
+		2449480287: true, // "pipe.$SNAPSHOT_INGRESS_LIVENESS"
+		2415950168: true, // "pipe.SwitchIngressParser.$PORT_METADATA"
+		4278517761: true,// "$tm.ppg"
+		4278386689: true,// "$PKTGEN_PORT_CFG"
+		4278386690: true,// "$PKTGEN_APPLICATION_CFG"
+		4278386691: true,// "$PKTGEN_PKT_BUFFER"
+		4278255618: true,// "$PORT_STAT"
+		4278255619: true,// "$PORT_HDL_INFO"
+		4278255620: true,// "$PORT_FP_IDX_INFO"
+		4278255621: true,// "$PORT_STR_INFO "
+	}
 	Obj          EtnryObj
 )
 

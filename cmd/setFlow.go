@@ -29,7 +29,7 @@ var (
 // setFlowCmd represents the setFlow command
 var setFlowCmd = &cobra.Command{
 	Use:   "set-flow TABLE_NAME ACTION-NAME ",
-	Short: "Set flow into table",
+	Short: "Insert the flows",
 	Long:  "Insert the flow to table with action",
 	Args:  cobra.MaximumNArgs(2),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -49,12 +49,13 @@ var setFlowCmd = &cobra.Command{
 			return ret, cobra.ShellCompDirectiveNoFileComp
 		} else if len(args) == 1 {
 			for _, v := range Obj.p4Info.Tables {
-				//ret  := make([]string, 0)
+				ret  := make([]string, 0)
 				if strings.Contains(v.Name, args[0]) {
 					for _, action := range v.ActionSpecs {
 						name := strings.Split(action.Name, ".")
 						ret = append(ret, name[len(name)-2] + "." + name[len(name)-1])
 					}
+					ret = append(ret, v.Name+args[0])
 					return ret, cobra.ShellCompDirectiveNoFileComp
 				}
 			}
