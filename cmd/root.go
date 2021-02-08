@@ -39,7 +39,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 	//rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.pisc-cli.yaml)")
-	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "", "The server address")
+	rootCmd.PersistentFlags().StringVarP(&server, "server", "S", "", "The server address")
 	//rootCmd.MarkPersistentFlagRequired("server")
 
 	// Cobra also supports local flags, which will only run

@@ -23,19 +23,19 @@ var setPreCmd = &cobra.Command{
 	Use:   "pre",
 	Short: "Set Packet Replication Engine (PRE) entry",
 	Long:  "Insert the flow to table with action",
-	Args:  cobra.MaximumNArgs(2),
+	Args:  cobra.ExactArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		_, _, conn, cancel, _, _ := initConfigClient()
 		defer conn.Close()
 		defer cancel()
-		toComplete = "mirror"
 		ret := make([]string, 0)
 		if len(args) < 1 {
-			//argsList, _ := Obj.nonP4Info.String()
 			for _, v := range Obj.nonP4Info.Tables {
-				ret = append(ret, v.Name)
+				if NotSupportToReadTable[v.ID] || !strings.Contains(v.Name, "pre") {
+					continue
+				}
+				ret = append(ret, strings.Trim(v.Name, "$"))
 			}
-			//ret = append(ret, Obj.nonP4Info.Tables)
 			return ret, cobra.ShellCompDirectiveNoFileComp
 		}
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -46,11 +46,6 @@ var setPreCmd = &cobra.Command{
 		ctxAddr = ctx
 		defer conn.Close()
 		defer cancel()
-
-		if len(args) < 1 {
-			fmt.Println("please checkout the table name.")
-			return
-		}
 
 		tableName := args[0]
 		req := &p4.WriteRequest{

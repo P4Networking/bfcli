@@ -514,28 +514,28 @@ func DumpEntries(stream *p4.BfRuntime_ReadClient, p4table *bfrt.Table) {
 					fmt.Println(fmt.Sprintf("\nEntry : %d\nMatch Key Info", kv))
 					// Match Keys
 					if tbl.GetKey() != nil {
-						iter := 0
-						for k, mk := range p4table.Key {
-							f := tbl.Key.Fields[iter]
+						for i := 0; i < len(tbl.Key.Fields); i++ {
+						//for k, mk := range p4table.Key {
+							f := tbl.Key.Fields[i]
+							mk := p4table.Key[i]
 							if mk.ID == f.FieldId {
 								switch strings.Split(reflect.TypeOf(f.GetMatchType()).String(), ".")[1] {
 								case "KeyField_Exact_":
 									m := f.GetExact()
-									mkWrt.Append([]string{p4table.Key[k].Name, "Exact", hex.EncodeToString(m.Value), "None"})
+									mkWrt.Append([]string{p4table.Key[i].Name, "Exact", hex.EncodeToString(m.Value), "None"})
 								case "KeyField_Ternary_":
 									t := f.GetTernary()
-									mkWrt.Append([]string{p4table.Key[k].Name, "Ternary", hex.EncodeToString(t.Value), hex.EncodeToString(t.Mask)})
+									mkWrt.Append([]string{p4table.Key[i].Name, "Ternary", hex.EncodeToString(t.Value), hex.EncodeToString(t.Mask)})
 								case "KeyField_Lpm":
 									l := f.GetLpm()
-									mkWrt.Append([]string{p4table.Key[k].Name, "LPM", string(l.Value), string(l.PrefixLen)})
+									mkWrt.Append([]string{p4table.Key[i].Name, "LPM", string(l.Value), string(l.PrefixLen)})
 								//	TODO : Range match field
 								//case "KeyField_Range_":
 									//	//r := f.GetRange()
 									//	//fmt.Printf("  %-20s %-10s High: %-8x Low: %-8x\n", p4table.Key[k].Name, "LPM", r.High, r.Low)
 								}
-								iter++
 							} else {
-								mkWrt.Append([]string{p4table.Key[k].Name, "None", "None", "None"})
+								mkWrt.Append([]string{p4table.Key[i].Name, "None", "None", "None"})
 							}
 						}
 						mkWrt.Render()

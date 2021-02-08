@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/P4Networking/pisc/util/enums/id"
-	"github.com/P4Networking/pisc/util/enums/port"
+	p "github.com/P4Networking/pisc/util/enums/port"
 	"github.com/P4Networking/proto/go/p4"
 	"github.com/spf13/cobra"
 	"log"
@@ -45,11 +45,11 @@ var setPortCmd = &cobra.Command{
 			speed = "100G"
 		}
 		Speed := map[string]int{
-			"100G" : port.BF_SPEED_100G,
-			"50G"  : port.BF_SPEED_50G,
-			"40G"  : port.BF_SPEED_40G,
-			"25G"  : port.BF_SPEED_25G,
-			"10G"  : port.BF_SPEED_10G,
+			"100G" : p.BF_SPEED_100G,
+			"50G"  : p.BF_SPEED_50G,
+			"40G"  : p.BF_SPEED_40G,
+			"25G"  : p.BF_SPEED_25G,
+			"10G"  : p.BF_SPEED_10G,
 		}
 		if Speed[speed] <= 0 {
 			fmt.Println("please check port speed value : 100G, 50G, 40G, 20G, 10G")
@@ -139,10 +139,10 @@ var setPortCmd = &cobra.Command{
 		}
 		req.Updates = append(req.Updates, Obj.nonP4Info.AddPort(
 			id.PortId(portNum),
-			port.PortSpeedType(Speed[speed]),
-			port.BF_FEC_Type(fec),
+			p.PortSpeedType(Speed[speed]),
+			p.BF_FEC_Type(fec),
 			lanes,
-			port.BF_PM_Port_Autoneg_Policy(An[an])))
+			p.BF_PM_Port_Autoneg_Policy(An[an])))
 
 		if _, err := (*cliAddr).Write(*ctxAddr, req); err != nil {
 			log.Printf("Got an error, %v \n", err.Error())
