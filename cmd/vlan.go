@@ -78,7 +78,7 @@ var setVlanCmd = &cobra.Command{
 				_ = cmd.Help()
 				return
 			}
-			opt[args[0]].(func(string))(vlanName)
+			opt[args[0]].(func([]string))(vlanId)
 		case optSet[4]:
 			// VLAN show
 			if !cmd.Flag("id").Changed {
@@ -132,18 +132,6 @@ func vlanAdd(vlanType string, port string, vid []string) {
 	}
 }
 
-func makeVlanArrayString(str []string) string {
-	ret := ""
-	for k, v := range str {
-		if k == 0 {
-			ret = v
-		} else {
-			ret = ret + "," + v
-		}
-	}
-	return ret
-}
-
 func vlanSetUntag(port string, vid []string) {
 	body := strings.NewReader(fmt.Sprintf(`{"portId": %s, "portType": "ACCESS", "vlanIds": [%s]}`, port, makeVlanArrayString(vid)))
 	res, err := http.Post("http://localhost:50101/v1/vlan/portupdate","application/x-www-form-urlencoded", body)
@@ -155,8 +143,8 @@ func vlanSetUntag(port string, vid []string) {
 	res.Body.Close()
 }
 
-func vlanSetTagged(port string, vid []string) {
-	body := strings.NewReader(fmt.Sprintf(`{"portId": %s, "portType": "TAGGED", "vlanIds": [%s]}`, port, makeVlanArrayString(vid)))
+func vlanSetTagged(port string, vlanId []string) {
+	body := strings.NewReader(fmt.Sprintf(`{"portId": %s, "portType": "TAGGED", "vlanIds": [%s]}`, port, makeVlanArrayString(vlanId)))
 	res, err := http.Post("http://localhost:50101/v1/vlan/portupdate","application/x-www-form-urlencoded", body)
 	if err != nil {
 		log.Fatal(err)
@@ -166,9 +154,9 @@ func vlanSetTagged(port string, vid []string) {
 	res.Body.Close()
 }
 
-func vlanModify(port string, vid []string) {
+func vlanModify(port string, vlanId []string) {
 	// TODO: Need to implement, it just an example of config
-	body := strings.NewReader(fmt.Sprintf(`{"portId": %s, "portType": "Tagged", "vlanIds": [%s]}`, port, makeVlanArrayString(vid)))
+	body := strings.NewReader(fmt.Sprintf(`{"portId": %s, "portType": "Tagged", "vlanIds": [%s]}`, port, makeVlanArrayString(vlanId)))
 	res, err := http.Post("http://localhost:50101/v1/vlan/portupdate","application/x-www-form-urlencoded", body)
 	if err != nil {
 		log.Fatal(err)
@@ -179,8 +167,19 @@ func vlanModify(port string, vid []string) {
 	res.Body.Close()
 }
 
-func vlanDelete(vlanName string, vlanId []string) {
+func vlanDelete(vlanId []string) {
 	// TODO: Need to implement
+	for _, v := range vlanId {
+		body := strings.NewReader(fmt.Sprintf(`{"vlanId": %s, "name": "%s"}`, v, ""))
+		res, err := http.Post("http://localhost:50101/v1/vlan/delete","application/x-www-form-urlencoded", body)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		resbody, _ := ioutil.ReadAll(res.Body)
+		log.Println(string(resbody))
+		res.Body.Close()
+	}
 }
 
 func vlanShow(vlanId []string) {
@@ -213,6 +212,18 @@ func rangeSplit(portsRange string) []string {
 	ret := make([]string, 0)
 	for i:=lower; i <= upper; i++ {
 		ret = append(ret, strconv.Itoa(i))
+	}
+	return ret
+}
+
+func makeVlanArrayString(str []string) string {
+	ret := ""
+	for k, v := range str {
+		if k == 0 {
+			ret = v
+		} else {
+			ret = ret + "," + v
+		}
 	}
 	return ret
 }
