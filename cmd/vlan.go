@@ -73,8 +73,8 @@ var setVlanCmd = &cobra.Command{
 
 		case optSet[3]:
 			// VLAN Delete
-			if !cmd.Flag("name").Changed {
-				fmt.Println("Check VLAN name")
+			if !cmd.Flag("id").Changed {
+				fmt.Println("Check VLAN id")
 				_ = cmd.Help()
 				return
 			}
@@ -124,11 +124,16 @@ func vlanCreate(vid, vlanName string) {
 func vlanAdd(vlanType string, port string, vid []string) {
 	ports := rangeSplit(port)
 	for _, port := range ports {
-		if strings.Contains(vlanType, "trunk") {
+		switch vlanType {
+		case "trunk":
 			vlanSetTagged(port, vid)
-			return
+			break
+		case "access":
+			vlanSetUntag(port, vid)
+			break
+		default:
+			log.Fatal("check vlan type what you inputted.")
 		}
-		vlanSetUntag(port, vid)
 	}
 }
 
@@ -195,23 +200,32 @@ func vlanShow(vlanId []string) {
 // and the other is upper where it needs to end adding the port number.
 func rangeSplit(portsRange string) []string {
 	spt := strings.Split(portsRange, "-")
-	var  lower, upper int
+	ret := make([]string, 0)
+	var lower, upper int
 	var err error
 	// Check string value is digit.
-	if lower, err = strconv.Atoi(spt[0]); err != nil {
-		log.Fatal(err)
-	}
-	if upper, err = strconv.Atoi(spt[1]); err != nil {
-		log.Fatal(err)
-	}
-	if lower > upper {
-		tmp := lower
-		lower = upper
-		upper = tmp
-	}
-	ret := make([]string, 0)
-	for i:=lower; i <= upper; i++ {
-		ret = append(ret, strconv.Itoa(i))
+	if len(spt) > 1 {
+		// Take range ports
+		if lower, err = strconv.Atoi(spt[0]); err != nil {
+			log.Fatal(err)
+		}
+		if upper, err = strconv.Atoi(spt[1]); err != nil {
+			log.Fatal(err)
+		}
+		if lower > upper {
+			tmp := lower
+			lower = upper
+			upper = tmp
+		}
+		for i := lower; i <= upper; i++ {
+			ret = append(ret, strconv.Itoa(i))
+		}
+	} else {
+		// Take only one port
+		if _, err = strconv.Atoi(spt[0]); err != nil {
+			log.Fatal(err)
+		}
+		ret = append(ret, spt[0])
 	}
 	return ret
 }
