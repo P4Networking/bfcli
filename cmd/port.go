@@ -21,7 +21,7 @@ var (
 var setPortCmd = &cobra.Command{
 	Use:   "port",
 	Short: "Set switch port properties",
-	Long:  "setting switch port properties. \nport speed : 10G, 25G, 40G, 50G, 100G\nport fec : \n",
+	Long:  "setting switch port properties. \nport speed : 10G, 25G, 40G, 50G, 100G\nport fec : 0, 1, 2\nAuto-Negotiation : 0, 1, 2\n",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		// WARN: the port command only support an add feature now,
@@ -36,6 +36,7 @@ var setPortCmd = &cobra.Command{
 		// Check Port Number
 		if !cmd.Flag("Port Number").Changed {
 			fmt.Println("please set the port number.")
+			_ = cmd.Help()
 			return
 		}
 
@@ -82,7 +83,7 @@ var setPortCmd = &cobra.Command{
 		An := map[uint]string {
 			0 : "PM_AN_FORCE_DISABLE",
 			1 : "PM_AN_FORCE_ENABLE",
-			2 :"PM_AN_MAX",
+			2 : "PM_AN_MAX",
 		}
 		if !cmd.Flag("Auto Negotiation").Changed {
 			an = 0

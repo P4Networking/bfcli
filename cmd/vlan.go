@@ -81,12 +81,15 @@ var setVlanCmd = &cobra.Command{
 			opt[args[0]].(func([]string))(vlanId)
 		case optSet[4]:
 			// VLAN show
-			if !cmd.Flag("id").Changed {
-				fmt.Println("Check VLAN Id")
+			if !cmd.Flag("id").Changed && !cmd.Flag("port").Changed {
+				fmt.Println("vlanId/portId is not set")
 				_ = cmd.Help()
 				return
+			} else if cmd.Flag("id").Changed && !cmd.Flag("port").Changed {
+				opt[args[0]].(func(interface{}, string))(vlanId, "vlan")
+			} else if !cmd.Flag("id").Changed && cmd.Flag("port").Changed {
+				opt[args[0]].(func(interface{}, string))(vlanPort, "port")
 			}
-			opt[args[0]].(func([]string))(vlanId)
 		default:
 			_ = cmd.Help()
 			return
@@ -129,6 +132,9 @@ func vlanAdd(vlanType string, port string, vid []string) {
 			vlanSetTagged(port, vid)
 			break
 		case "access":
+			if len(vid) > 1 {
+				log.Panic("access port can only configure with 1 vlanId")
+			}
 			vlanSetUntag(port, vid)
 			break
 		default:
@@ -137,8 +143,8 @@ func vlanAdd(vlanType string, port string, vid []string) {
 	}
 }
 
-func vlanSetUntag(port string, vid []string) {
-	body := strings.NewReader(fmt.Sprintf(`{"portId": %s, "portType": "ACCESS", "vlanIds": [%s]}`, port, makeVlanArrayString(vid)))
+func vlanSetUntag(port string, vlanId []string) {
+	body := strings.NewReader(fmt.Sprintf(`{"portId": %s, "portType": "ACCESS", "vlanIds": [%s]}`, port, makeVlanArrayString(vlanId)))
 	res, err := http.Post("http://localhost:50101/v1/vlan/portupdate","application/x-www-form-urlencoded", body)
 	if err != nil {
 		log.Fatal(err)
@@ -148,8 +154,8 @@ func vlanSetUntag(port string, vid []string) {
 	res.Body.Close()
 }
 
-func vlanSetTagged(port string, vlanId []string) {
-	body := strings.NewReader(fmt.Sprintf(`{"portId": %s, "portType": "TAGGED", "vlanIds": [%s]}`, port, makeVlanArrayString(vlanId)))
+func vlanSetTagged(port string, vlanIds []string) {
+	body := strings.NewReader(fmt.Sprintf(`{"portId": %s, "portType": "TAGGED", "vlanIds": [%s]}`, port, makeVlanArrayString(vlanIds)))
 	res, err := http.Post("http://localhost:50101/v1/vlan/portupdate","application/x-www-form-urlencoded", body)
 	if err != nil {
 		log.Fatal(err)
@@ -173,7 +179,6 @@ func vlanModify(port string, vlanId []string) {
 }
 
 func vlanDelete(vlanId []string) {
-	// TODO: Need to implement
 	for _, v := range vlanId {
 		body := strings.NewReader(fmt.Sprintf(`{"vlanId": %s, "name": "%s"}`, v, ""))
 		res, err := http.Post("http://localhost:50101/v1/vlan/delete","application/x-www-form-urlencoded", body)
@@ -187,11 +192,31 @@ func vlanDelete(vlanId []string) {
 	}
 }
 
-func vlanShow(vlanId []string) {
-	// TODO: Need to implement
-	for _, v := range vlanId {
-		value, _ := strconv.ParseUint(v, 10, 16)
-		fmt.Println(value)
+func vlanShow(data interface{}, choice string ) {
+	if choice == "vlan" {
+		for _, v := range data.([]string) {
+			value, _ := strconv.Atoi(v)
+			body := strings.NewReader(fmt.Sprintf(`{"vlanId": %d, "portId": %d, "choice": "vlan"}`, value, 0))
+			res, err := http.Post("http://localhost:50101/v1/vlan/get","application/x-www-form-urlencoded", body)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			resbody, _ := ioutil.ReadAll(res.Body)
+			log.Println(string(resbody))
+			res.Body.Close()
+		}
+	} else {
+		value, _ := strconv.Atoi(data.(string))
+		body := strings.NewReader(fmt.Sprintf(`{"vlanId": %d, "portId": %d, "choice": "port"}`, 0, value))
+		res, err := http.Post("http://localhost:50101/v1/vlan/get","application/x-www-form-urlencoded", body)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		resbody, _ := ioutil.ReadAll(res.Body)
+		log.Println(string(resbody))
+		res.Body.Close()
 	}
 }
 
