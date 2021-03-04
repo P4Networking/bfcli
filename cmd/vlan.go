@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/spf13/cobra"
 	"io/ioutil"
@@ -73,22 +74,26 @@ var setVlanCmd = &cobra.Command{
 
 		case optSet[3]:
 			// VLAN Delete
-			if !cmd.Flag("id").Changed {
-				fmt.Println("Check VLAN id")
+			if !cmd.Flag("id").Changed && !cmd.Flag("port").Changed{
+				fmt.Println("vlanId and portId are not given.")
 				_ = cmd.Help()
 				return
 			}
-			opt[args[0]].(func([]string))(vlanId)
+			if cmd.Flag("id").Changed && !cmd.Flag("port").Changed {
+				opt[args[0]].(func([]string, string, int))(vlanId, vlanPort, 0)
+			} else if cmd.Flag("id").Changed && cmd.Flag("port").Changed {
+				opt[args[0]].(func([]string, string, int))(vlanId, vlanPort, 1)
+			}
 		case optSet[4]:
 			// VLAN show
 			if !cmd.Flag("id").Changed && !cmd.Flag("port").Changed {
-				fmt.Println("vlanId/portId is not set")
-				_ = cmd.Help()
-				return
+				opt[args[0]].(func(interface{}, int))(0, 2)
 			} else if cmd.Flag("id").Changed && !cmd.Flag("port").Changed {
-				opt[args[0]].(func(interface{}, string))(vlanId, "vlan")
+				opt[args[0]].(func(interface{}, int))(vlanId, 0)
 			} else if !cmd.Flag("id").Changed && cmd.Flag("port").Changed {
-				opt[args[0]].(func(interface{}, string))(vlanPort, "port")
+				opt[args[0]].(func(interface{}, int))(vlanPort, 1)
+			} else {
+				_ = cmd.Help()
 			}
 		default:
 			_ = cmd.Help()
@@ -120,22 +125,22 @@ func vlanCreate(vid, vlanName string) {
 		log.Fatal(err)
 	}
 	resbody, _ := ioutil.ReadAll(res.Body)
-	log.Println(string(resbody))
-	res.Body.Close()
+	defer res.Body.Close()
+	printMessage(resbody)
 }
 
 func vlanAdd(vlanType string, port string, vid []string) {
 	ports := rangeSplit(port)
-	for _, port := range ports {
+	for _, p := range ports {
 		switch vlanType {
 		case "trunk":
-			vlanSetTagged(port, vid)
+			vlanSetTagged(p, vid)
 			break
 		case "access":
 			if len(vid) > 1 {
 				log.Panic("access port can only configure with 1 vlanId")
 			}
-			vlanSetUntag(port, vid)
+			vlanSetUntag(p, vid)
 			break
 		default:
 			log.Fatal("check vlan type what you inputted.")
@@ -149,9 +154,9 @@ func vlanSetUntag(port string, vlanId []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer res.Body.Close()
 	resbody, _ := ioutil.ReadAll(res.Body)
-	log.Println(string(resbody))
-	res.Body.Close()
+	printMessage(resbody)
 }
 
 func vlanSetTagged(port string, vlanIds []string) {
@@ -161,8 +166,8 @@ func vlanSetTagged(port string, vlanIds []string) {
 		log.Fatal(err)
 	}
 	resbody, _ := ioutil.ReadAll(res.Body)
-	log.Println(string(resbody))
-	res.Body.Close()
+	defer res.Body.Close()
+	printMessage(resbody)
 }
 
 func vlanModify(port string, vlanId []string) {
@@ -174,52 +179,100 @@ func vlanModify(port string, vlanId []string) {
 		return
 	}
 	resbody, _ := ioutil.ReadAll(res.Body)
-	log.Println(string(resbody))
+	printMessage(resbody)
 	res.Body.Close()
 }
 
-func vlanDelete(vlanId []string) {
-	for _, v := range vlanId {
-		body := strings.NewReader(fmt.Sprintf(`{"vlanId": %s, "name": "%s"}`, v, ""))
-		res, err := http.Post("http://localhost:50101/v1/vlan/delete","application/x-www-form-urlencoded", body)
-		if err != nil {
-			log.Fatal(err)
-			return
+func vlanDelete(vlanId []string, portId string, choice int) {
+	switch choice {
+	case 0:
+		// delete vlan instance
+		for _, v := range vlanId {
+			body := strings.NewReader(fmt.Sprintf(`{"vlanId": %s, "port": "%s", "choice": %d}`, v, 0, 0))
+			res, err := http.Post("http://localhost:50101/v1/vlan/delete","application/x-www-form-urlencoded", body)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			resbody, _ := ioutil.ReadAll(res.Body)
+			printMessage(resbody)
+			res.Body.Close()
 		}
-		resbody, _ := ioutil.ReadAll(res.Body)
-		log.Println(string(resbody))
-		res.Body.Close()
+		break
+	case 1:
+		// delete portId from vlan instance by portId
+		ports := rangeSplit(portId)
+		for _, p := range ports {
+			body := strings.NewReader(fmt.Sprintf(`{"vlanId": %s, "portId": "%s", "choice": %d}`, vlanId[0], p, 1))
+			res, err := http.Post("http://localhost:50101/v1/vlan/delete","application/x-www-form-urlencoded", body)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			resbody, _ := ioutil.ReadAll(res.Body)
+			printMessage(resbody)
+			res.Body.Close()
+		}
+		break
+	default:
+		return
 	}
 }
 
-func vlanShow(data interface{}, choice string ) {
-	if choice == "vlan" {
+func vlanShow(data interface{}, choice int ) {
+	switch choice {
+	case 0:
 		for _, v := range data.([]string) {
 			value, _ := strconv.Atoi(v)
-			body := strings.NewReader(fmt.Sprintf(`{"vlanId": %d, "portId": %d, "choice": "vlan"}`, value, 0))
+			body := strings.NewReader(fmt.Sprintf(`{"vlanId": %d, "portId": %d, "choice": %d}`, value, 0, 0))
 			res, err := http.Post("http://localhost:50101/v1/vlan/get","application/x-www-form-urlencoded", body)
 			if err != nil {
 				log.Fatal(err)
 				return
 			}
 			resbody, _ := ioutil.ReadAll(res.Body)
-			log.Println(string(resbody))
+			printMessage(resbody)
 			res.Body.Close()
 		}
-	} else {
+		break
+	case 1:
 		value, _ := strconv.Atoi(data.(string))
-		body := strings.NewReader(fmt.Sprintf(`{"vlanId": %d, "portId": %d, "choice": "port"}`, 0, value))
+		body := strings.NewReader(fmt.Sprintf(`{"vlanId": %d, "portId": %d, "choice": %d}`, 0, value, 1))
 		res, err := http.Post("http://localhost:50101/v1/vlan/get","application/x-www-form-urlencoded", body)
 		if err != nil {
 			log.Fatal(err)
 			return
 		}
+		defer res.Body.Close()
+
 		resbody, _ := ioutil.ReadAll(res.Body)
-		log.Println(string(resbody))
-		res.Body.Close()
+		printMessage(resbody)
+		break
+	case 2:
+		// show all of the vlan information
+		body := strings.NewReader(fmt.Sprintf(`{"vlanId": %d, "portId": %d, "choice": %d}`, 0, 0, 2))
+		res, err := http.Post("http://localhost:50101/v1/vlan/get","application/x-www-form-urlencoded", body)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		defer res.Body.Close()
+
+		resbody, _ := ioutil.ReadAll(res.Body)
+		printMessage(resbody)
+		break
+	default:
+		return
 	}
 }
-
+func printMessage(msg []byte) {
+	var message reponseMessage
+	err := json.Unmarshal(msg, &message)
+	if err != nil {
+		log.Println(err)
+	}
+	fmt.Println(message.Message)
+}
 // rangeSplit function split the port range value into two values,
 // the one is lower where it needs to start to add the port number,
 // and the other is upper where it needs to end adding the port number.
@@ -265,4 +318,9 @@ func makeVlanArrayString(str []string) string {
 		}
 	}
 	return ret
+}
+
+type reponseMessage struct {
+	IsSuccess  bool
+	Message   string
 }
