@@ -583,50 +583,43 @@ func genEntity(tableId uint32) *p4.Entity {
 // DeleteEntries function read entries from the response to delete all entries of a table
 func DeleteEntries(rsp **p4.ReadResponse, cli *p4.BfRuntimeClient, ctx *context.Context, matchKey []string) ([]int, error) {
 	var result  = make([]int, 0)
-	var pbcount = 0
 	var delReq *p4.WriteRequest = nil
-
+	var tbl *p4.TableEntry = nil
+	var match []*p4.KeyField = nil
+	var bar *progressbar.ProgressBar
 	if matchKey == nil {
-		pbcount = len((*rsp).Entities)
+		bar = progressbar.Default(int64(len((*rsp).Entities)))
 	} else {
-		pbcount = 1
+		bar = progressbar.Default(int64(1))
 	}
-	bar := progressbar.Default(int64(pbcount))
-
 	for k, e := range (*rsp).Entities {
-		tbl := e.GetTableEntry()
-		found := false
-		delReq = nil
+		var found bool = true
+		tbl = e.GetTableEntry()
 		if matchKey != nil {
 			collectedMatchTypes, ok := collectTableMatchTypes(&matchKey)
 			if !ok {
-				fmt.Println("Match key argument are not matched")
-				return nil, errors.New("argument err")
+				return nil, errors.New("Match key not matched")
 			}
-			match := BuildMatchKeys(&collectedMatchTypes)
+			match = BuildMatchKeys(&collectedMatchTypes)
 			if match == nil {
 				// the nil of the match variable is mean that the BuildMatchKeys function can't make the match key with the input argument.
 				return nil, nil
 			}
-			for kf, kv := range match {
-				// TODO: may be can find a better way to compare the match key.
-				if tbl.Key.Fields[kf].String() == kv.String() {
-					found = true
+			for key, v := range tbl.Key.Fields {
+				if v.String() != match[key].String() {
+					found = false
 					break
 				}
 			}
-		} else {
-			found = true
 		}
 		if found {
-			result = append(result, k)
 			delReq = util.GenWriteRequestWithId(p4.Update_DELETE, id.TableId(tbl.TableId), tbl.Key.Fields, tbl.Data)
-			_ = bar.Add(1)
-
 			_, err := (*cli).Write(*ctx, delReq)
 			if err != nil {
 				return nil, err
 			}
+			_ = bar.Add(1)
+			result = append(result, k)
 		}
 	}
 	return result, nil

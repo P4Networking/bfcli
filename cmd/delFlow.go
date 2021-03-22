@@ -45,7 +45,7 @@ var delFlowCmd = &cobra.Command{
 		cli := *cliAddr
 		ctx := *ctxAddr
 
-		if all && !clear && len(args) <= 0 && !cmd.Flag("match").Changed {
+		if all && !clear && !cmd.Flag("match").Changed {
 			// flag "-a" Clear all tables
 			for _, tb := range Obj.p4Info.Tables {
 				if NotSupportToReadTable[tb.ID] {
@@ -53,7 +53,7 @@ var delFlowCmd = &cobra.Command{
 				}
 				Obj.table = append(Obj.table, tb)
 			}
-		} else if !all && clear && len(args) > 0 && !cmd.Flag("match").Changed {
+		} else if !all && clear && !cmd.Flag("match").Changed {
 			// flag "-c" Clear a table
 			for _, tb := range Obj.p4Info.Tables {
 				if NotSupportToReadTable[tb.ID] {
@@ -63,7 +63,7 @@ var delFlowCmd = &cobra.Command{
 					Obj.table = append(Obj.table, tb)
 				}
 			}
-		} else if !all && !clear && len(args) > 0 && cmd.Flag("match").Changed {
+		} else if !all && !clear && cmd.Flag("match").Changed {
 			for a, v := range delEntry {
 				delEntry[a] = strings.TrimSpace(v)
 			}
@@ -93,7 +93,6 @@ var delFlowCmd = &cobra.Command{
 			cmd.Help()
 			return
 		}
-
 		for _, tb := range Obj.table {
 			stream, err := cli.Read(ctx, genReadRequestWithId(tb.ID))
 			if err != nil {
@@ -117,6 +116,7 @@ var delFlowCmd = &cobra.Command{
 					if cmd.Flag("match").Changed {
 						cnt, err = DeleteEntries(&rsp, &cli, &ctx, delEntry)
 					} else {
+						//all, clear
 						cnt, err = DeleteEntries(&rsp, &cli, &ctx, nil)
 					}
 					if err != nil {

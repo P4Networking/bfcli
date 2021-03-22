@@ -37,8 +37,8 @@ var setFlowCmd = &cobra.Command{
 		defer conn.Close()
 		defer cancel()
 
-		ret := make([]string, 0)
 		if len(args) < 1 {
+			ret := make([]string, 0)
 			argsList, _ := Obj.p4Info.GuessTableName(toComplete)
 			for _, v := range argsList {
 				if strings.Contains(v, preFixIg) || strings.Contains(v, preFixEg) {
@@ -47,20 +47,19 @@ var setFlowCmd = &cobra.Command{
 				}
 			}
 			return ret, cobra.ShellCompDirectiveNoFileComp
-		} else if len(args) == 1 {
+		}
+		if len(args) == 1 {
 			for _, v := range Obj.p4Info.Tables {
-				ret  := make([]string, 0)
 				if strings.Contains(v.Name, args[0]) {
+					ret  := make([]string, 0)
 					for _, action := range v.ActionSpecs {
 						name := strings.Split(action.Name, ".")
-						ret = append(ret, name[len(name)-2] + "." + name[len(name)-1])
+						ret = append(ret, name[len(name)-1])
 					}
-					ret = append(ret, v.Name+args[0])
 					return ret, cobra.ShellCompDirectiveNoFileComp
 				}
 			}
 		}
-
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	},
 	PreRun: func(cmd *cobra.Command, args []string) {
@@ -165,7 +164,7 @@ var setFlowSub = &cobra.Command{
 
 		for _, table := range Obj.table {
 			for _, actionSpec := range table.ActionSpecs {
-				if strings.Contains(actionSpec.Name, args[1]) {
+				if strings.Compare(args[1], actionSpec.Name[strings.LastIndex(actionSpec.Name, ".")+1:]) == 0 {
 					Obj.actions[actionSpec.ID] = actionSpec.Name
 					Obj.actionId = actionSpec.ID
 					Obj.actionName = actionSpec.Name
@@ -187,10 +186,10 @@ var setFlowSub = &cobra.Command{
 			return
 		}
 
-		ttlId, ok := Obj.p4Info.GetDataId(Obj.table[0].Name, "$ENTRY_TTL")
-		if ok && ttl == "" {
-			fmt.Println("table has ttl entry but it's not set, using default value 600 for ttl")
-			ttl = "600"
+		ttlId, ttlok := Obj.p4Info.GetDataId(Obj.table[0].Name, "$ENTRY_TTL")
+		if ttlok && ttl == "" {
+			fmt.Println("table has ttl entry but it's not set, using default value 1000 for ttl")
+			ttl = "1000"
 		}
 
 		collectedActionFieldIds, err := collectActionFieldIds(&Obj.table[0], Obj.actionId, actionValues)
@@ -199,8 +198,7 @@ var setFlowSub = &cobra.Command{
 			return
 		}
 		if len(collectedActionFieldIds) != len(actionValues) {
-			fmt.Printf("expected action field length : %d, received action filed length [%d]\n", len(collectedActionFieldIds), len(actionValues))
-			fmt.Println("Check action arguments")
+			fmt.Printf("the expected action field length is : %d, the received action filed length is : %d\n", len(collectedActionFieldIds), len(actionValues))
 			return
 		}
 
@@ -228,7 +226,7 @@ var setFlowSub = &cobra.Command{
 			}
 		}
 
-		if ok {
+		if ttlok {
 			l, err := strconv.ParseUint(ttl, 10, 32)
 			if err != nil {
 				fmt.Printf("Please Check the TTL value %s.\n", ttl)
