@@ -1,18 +1,3 @@
-/*
-Copyright © 2020 NAME HERE <EMAIL ADDRESS>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package cmd
 
 import (
@@ -21,26 +6,42 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	logo     bool
+	version  bool
+	piscLogo string
+)
+
 // versionCmd represents the version command
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Show the bfcli version information",
-	Long: `Show the bfcli version information`,
+	Short: "Show the pisc-cli version information",
+	Long:  `Show the pisc-cli version information`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("version called")
+		if logo {
+			callLogo()
+			fmt.Println(piscLogo)
+		}
+		fmt.Println("Version : 0.1.0")
 	},
+}
+
+func callLogo() {
+	piscLogo =
+		"           /$$\n" +
+			"           |__/\n" +
+			"  /$$$$$$  /$$  /$$$$$$$  /$$$$$$$\n" +
+			" /$$__  $$| $$ /$$_____/ /$$_____/\n" +
+			"| $$  \\ $$| $$|  $$$$$$ | $$\n" +
+			"| $$  | $$| $$ \\____  $$| $$\n" +
+			"| $$$$$$$/| $$ /$$$$$$$/|  $$$$$$$\n" +
+			"| $$____/ |__/|_______/  \\_______/\n" +
+			"| $$\n" +
+			"| $$\n" +
+			"|__/\n"
 }
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// versionCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// versionCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	versionCmd.Flags().BoolVarP(&logo, "logo", "l", false, "")
 }

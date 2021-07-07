@@ -1,51 +1,139 @@
-/*
-Copyright © 2020 Chun Ming Ou <breezestars@gmail.com>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package cmd
 
 import (
 	"fmt"
-
 	"github.com/spf13/cobra"
+	"io"
+	"log"
+	"strings"
+)
+
+var (
+	clear    bool
+	delEntry []string
 )
 
 // delFlowCmd represents the delFlow command
 var delFlowCmd = &cobra.Command{
-	Use:   "del-flow",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Use:   "del-flow TABLE-NAME ",
+	Short: "Delete entries from table",
+	Long:  `del-flow can remove all of the entries from specific table`,
+	Args:  cobra.MaximumNArgs(1),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		_, _, conn, cancel, _, _ := initConfigClient()
+		defer conn.Close()
+		defer cancel()
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+		ret := make([]string, 0)
+		if len(args) < 1 {
+			argsList, _ := Obj.p4Info.GuessTableName(toComplete)
+			for _, v := range argsList {
+				if strings.Contains(v, preFixIg) || strings.Contains(v, preFixEg) {
+					name := strings.Split(v, ".")
+					ret = append(ret, name[len(name)-2]+"."+name[len(name)-1])
+				}
+			}
+			return ret, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	},
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("delFlow called")
+		cliAddr, ctxAddr, conn, cancel, _, _ := initConfigClient()
+		defer conn.Close()
+		defer cancel()
+		cli := *cliAddr
+		ctx := *ctxAddr
+
+		if all && !clear && !cmd.Flag("match").Changed {
+			// flag "-a" Clear all tables
+			for _, tb := range Obj.p4Info.Tables {
+				if NotSupportToReadTable[tb.ID] {
+					continue
+				}
+				Obj.table = append(Obj.table, tb)
+			}
+		} else if !all && clear && !cmd.Flag("match").Changed {
+			// flag "-c" Clear a table
+			for _, tb := range Obj.p4Info.Tables {
+				if NotSupportToReadTable[tb.ID] {
+					continue
+				}
+				if strings.Contains(tb.Name, args[0]) {
+					Obj.table = append(Obj.table, tb)
+				}
+			}
+		} else if !all && !clear && cmd.Flag("match").Changed {
+			for a, v := range delEntry {
+				delEntry[a] = strings.TrimSpace(v)
+			}
+
+			for _, tb := range Obj.p4Info.Tables {
+				if NotSupportToReadTable[tb.ID] {
+					continue
+				}
+				if strings.Contains(tb.Name, args[0]) {
+					Obj.table = append(Obj.table, tb)
+				}
+			}
+
+			if len(Obj.table) > 1 {
+				fmt.Println(fmt.Errorf("Too many tables matched."))
+				for _, k := range Obj.table {
+					fmt.Printf("Table : %s\n", k.Name)
+				}
+				return
+			}
+			if len(Obj.table) <=0 {
+				fmt.Println(fmt.Errorf("No tables matched.\n"))
+				return
+			}
+		} else {
+			fmt.Println(fmt.Errorf("check the flag or args"))
+			cmd.Help()
+			return
+		}
+		for _, tb := range Obj.table {
+			stream, err := cli.Read(ctx, genReadRequestWithId(tb.ID))
+			if err != nil {
+				log.Fatalf("Got error, %v \n", err.Error())
+				return
+			}
+
+			for {
+				rsp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				if rsp != nil {
+					if len(rsp.GetEntities()) == 0 {
+						fmt.Printf("%s table is empty\n", tb.Name)
+						break
+					}
+
+					var cnt []int
+					var err error
+					if cmd.Flag("match").Changed {
+						cnt, err = DeleteEntries(&rsp, &cli, &ctx, delEntry)
+					} else {
+						//all, clear
+						cnt, err = DeleteEntries(&rsp, &cli, &ctx, nil)
+					}
+					if err != nil {
+						fmt.Printf("Failed to delete entry: table \"%s\" with fields: %s\n", tb.Name, delEntry)
+						fmt.Println(err.Error())
+						return
+					}
+					fmt.Printf("%d entires of \"%s\" table have cleared\n", len(cnt), tb.Name)
+				}
+			}
+		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(delFlowCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// delFlowCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// delFlowCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	delFlowCmd.Flags().BoolVarP(&all, "all", "a", false, "Clear all the table")
+	delFlowCmd.Flags().BoolVarP(&clear, "clear", "c", false, "Clear a table")
+	delFlowCmd.Flags().StringSliceVarP(&delEntry, "match", "m", []string{}, "Delete entry by given match key")
 }
